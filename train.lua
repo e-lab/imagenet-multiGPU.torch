@@ -48,11 +48,7 @@ local function paramsForEpoch(epoch)
     end
     local regimes = {
         -- start, end,    LR,   WD,
-        {  1,     18,   1e-2,   5e-4, },
-        { 19,     29,   5e-3,   5e-4  },
-        { 30,     43,   1e-3,   0 },
-        { 44,     52,   5e-4,   0 },
-        { 53,    1e8,   1e-4,   0 },
+        {  1,    1e8,   5e-2,   5e-4, },
     }
 
     for _, row in ipairs(regimes) do
@@ -101,7 +97,7 @@ function train()
          function()
             local inputs, labels
             local ok = xpcall(function()
-                                 inputs, labels = trainLoader:sample(opt.batchSize)
+                                 inputs, labels = trainLoader:sample(opt.batchSize, opt.nSamples, opt.nBlocks*opt.nSamples)
                               end, function()
                                  print("ERROR!")
                                  print(debug.traceback())
@@ -185,7 +181,8 @@ function trainBatch(inputsCPU, labelsCPU)
       outputs = model:forward(inputs)
       err = criterion:forward(outputs, labels)
       local gradOutputs = criterion:backward(outputs, labels)
-      model:backward(inputs, gradOutputs)
+      local nb_backwards = math.max(1, opt.nSamples-1)
+      model:backward(inputs, gradOutputs:view(nb_backwards, opt.batchSize, gradOutputs:size(2)):sum(1):squeeze())
       return err, gradParameters
    end
    optim.sgd(feval, parameters, optimState)

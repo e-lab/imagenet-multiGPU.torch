@@ -323,14 +323,16 @@ local function tableToOutput(self, dataTable, scalarTable)
 end
 
 -- sampler, samples from the training set.
-function dataset:sample(quantity, min)
+function dataset:sample(quantity, min, range)
    assert(quantity)
    local min = min or 1
+   local range = range or quality
    local dataTable = {}
    local scalarTable = {}
    local class
    for i=1,quantity do
-      class = ((i-1)%min == 0) and torch.random(1, #self.classes) or class
+      local criteria = ((i-1)%min == 0) or (i > range)
+      class = criteria and torch.random(1, #self.classes) or class
       local out = self:getByClass(class)
       table.insert(dataTable, out)
       table.insert(scalarTable, class)

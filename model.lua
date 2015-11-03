@@ -8,6 +8,8 @@
 --
 require 'nn'
 require 'cunn'
+require 'stnn'
+require 'stcunn'
 require 'optim'
 
 --[[
@@ -30,7 +32,7 @@ else
 end
 
 -- 2. Create Criterion
-criterion = nn.ClassNLLCriterion()
+criterion = nn.TripletCriterion(nil, nil, opt.nSamples, opt.nBlocks)
 
 print('=> Model')
 print(model)
