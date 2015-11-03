@@ -23,6 +23,7 @@ function M.parse(arg)
     cmd:option('-backend',     'cudnn', 'Options: cudnn | ccn2 | cunn')
     ------------- Data options ------------------------
     cmd:option('-nDonkeys',        2, 'number of donkeys to initialize (data loading threads)')
+    cmd:option('-normalize',    true, 'globally normalize samples during training')
     ------------- Training options --------------------
     cmd:option('-nEpochs',         55,    'Number of total epochs to run')
     cmd:option('-epochSize',       10000, 'Number of batches per epoch')
