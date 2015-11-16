@@ -82,8 +82,12 @@ local function remove_parallelism(y, x)
       elseif x.modules[i].__typename == 'nn.Parallel' then
          y:add(x.modules[i])
 
-      -- recursively apply remove_parallelism to only 1st branch
+      -- recursively apply remove_parallelism to only 1st branch (fbcunn module)
       elseif x.modules[i].__typename == 'nn.DataParallel' then
+         remove_parallelism(y, x.modules[i].modules[1])
+
+      -- recursively apply remove_parallelism to only 1st branch (cunn module)
+      elseif x.modules[i].__typename == 'nn.DataParallelTable' then
          remove_parallelism(y, x.modules[i].modules[1])
 
       -- concatenate multiple model into one
@@ -262,7 +266,6 @@ local function convert_model(arg)
    -- load model
    local x = torch.load(arg.src)
    x:evaluate()
-   x = x:float()
 
    print('==> before conversion')
    print(x)
@@ -272,7 +275,7 @@ local function convert_model(arg)
    local y_serial = remove_parallelism(nil, x:clone())
 
    -- (2) remove cuda dependent obj (inplace)
-   local y_system = switch_backend(y_serial)
+   local y_system = switch_backend(y_serial:float())
 
    -- (3) remove unnecessary modules (inplace)
    local y_squash = squash_model(y_system, arg)
