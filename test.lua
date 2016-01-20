@@ -39,7 +39,7 @@ function test()
          -- work to be done by donkey thread
          function()
             local inputs, labels = testLoader:get(indexStart, indexEnd)
-            return inputs, labels
+            return sendTensor(inputs), sendTensor(labels)
          end,
          -- callback that is run in the main thread once the work is done
          testBatch
@@ -61,19 +61,16 @@ function test()
                        epoch, timer:time().real, loss, top1_center))
 
    if opt.conf then
-      io.write('==> Saving training confusion matrix...'); io.flush()
-      if opt.verboseConf then
-         local confFile = io.open(paths.concat(opt.save, 'confusion.txt'), 'w')
-         confFile:write('-- Training --------------------------------------------------------------------\n')
-         confFile:write(trainConf:__tostring__())
-         confFile:write('\n\n')
-         confFile:write('\n-- Testing ---------------------------------------------------------------------\n')
-         confFile:write(testConf:__tostring__())
-         confFile:write('\n\n')
-         confFile:close()
-      end
+      print('==> Saving training confusion matrix')
+      local confFile = io.open(paths.concat(opt.save, 'confusion.txt'), 'w')
+      confFile:write('-- Training --------------------------------------------------------------------\n')
+      confFile:write(trainConf:__tostring__())
+      confFile:write('\n\n')
+      confFile:write('\n-- Testing ---------------------------------------------------------------------\n')
+      confFile:write(testConf:__tostring__())
+      confFile:write('\n\n')
+      confFile:close()
       torch.save(paths.concat(opt.save, 'confusion.t7'), {trainConf, testConf})
-      print(' Done!')
    end
 
    print('\n')
@@ -81,12 +78,16 @@ function test()
 
 end -- of test()
 -----------------------------------------------------------------------------
+local inputsCPU = torch.FloatTensor()
+local labelsCPU = torch.LongTensor()
 local inputs = torch.CudaTensor()
 local labels = torch.CudaTensor()
 
-function testBatch(inputsCPU, labelsCPU)
+function testBatch(inputsThread, labelsThread)
    batchNumber = batchNumber + opt.batchSize
 
+   receiveTensor(inputsThread, inputsCPU)
+   receiveTensor(labelsThread, labelsCPU)
    inputs:resize(inputsCPU:size()):copy(inputsCPU)
    labels:resize(labelsCPU:size()):copy(labelsCPU)
 

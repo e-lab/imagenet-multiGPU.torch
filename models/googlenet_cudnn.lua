@@ -76,11 +76,17 @@ function createModel(nGPU)
    splitter:add(main_branch):add(aux_classifier)
    local model = nn.Sequential():add(features):add(splitter)
 
-   model:cuda()
-   model = makeDataParallel(model, nGPU) -- defined in util.lua
-   model.imageSize = 256
-   model.imageCrop = 224
-
+   if nGPU > 1 then
+      assert(nGPU <= cutorch.getDeviceCount(), 'number of GPUs less than nGPU specified')
+      require 'fbcunn'
+      local model_single = model
+      model = nn.DataParallel(1)
+      for i=1,nGPU do
+         cutorch.withDevice(i, function()
+                               model:add(model_single:clone())
+         end)
+      end
+   end
 
    return model
 end

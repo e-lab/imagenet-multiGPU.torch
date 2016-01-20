@@ -1,3 +1,4 @@
+package.path = "../fbcunn_files/?.lua;" .. package.path
 torch.setdefaulttensortype('torch.FloatTensor')
 
 -- torch generic lib
@@ -5,6 +6,11 @@ require('pl')
 require('nn')
 require('cunn')
 require('cudnn')
+
+-- fb dependent lib
+require('AbstractParallel')
+require('DataParallel')
+require('ModelParallel')
 
 
 local opt = lapp([[
@@ -55,7 +61,7 @@ local function merge_model_parallel(y, x, i)
          for k = 1, #xsub do
             local range = {output*(k-1)+1, output*k}
             y.modules[#y.modules].running_mean[{range}]:copy(xsub[k].modules[j].running_mean)
-            y.modules[#y.modules].running_var[{range}]:copy(xsub[k].modules[j].running_var)
+            y.modules[#y.modules].running_std[{range}]:copy(xsub[k].modules[j].running_std)
             if affine then
                y.modules[#y.modules].weight[{range}]:copy(xsub[k].modules[j].weight)
                y.modules[#y.modules].bias[{range}]:copy(xsub[k].modules[j].bias)
@@ -82,12 +88,8 @@ local function remove_parallelism(y, x)
       elseif x.modules[i].__typename == 'nn.Parallel' then
          y:add(x.modules[i])
 
-      -- recursively apply remove_parallelism to only 1st branch (fbcunn module)
+      -- recursively apply remove_parallelism to only 1st branch
       elseif x.modules[i].__typename == 'nn.DataParallel' then
-         remove_parallelism(y, x.modules[i].modules[1])
-
-      -- recursively apply remove_parallelism to only 1st branch (cunn module)
-      elseif x.modules[i].__typename == 'nn.DataParallelTable' then
          remove_parallelism(y, x.modules[i].modules[1])
 
       -- concatenate multiple model into one
@@ -220,7 +222,7 @@ local function squash_model(x, state)
                   absorb_bn(x.modules[i-1].weight,
                             x.modules[i-1].bias,
                             x.modules[i].running_mean,
-                            x.modules[i].running_std or x.modules[i].running_var, -- backward compat
+                            x.modules[i].running_std,
                             x.modules[i].affine,
                             x.modules[i].weight,
                             x.modules[i].bias)
@@ -266,6 +268,7 @@ local function convert_model(arg)
    -- load model
    local x = torch.load(arg.src)
    x:evaluate()
+   x = x:float()
 
    print('==> before conversion')
    print(x)
@@ -275,7 +278,7 @@ local function convert_model(arg)
    local y_serial = remove_parallelism(nil, x:clone())
 
    -- (2) remove cuda dependent obj (inplace)
-   local y_system = switch_backend(y_serial:float())
+   local y_system = switch_backend(y_serial)
 
    -- (3) remove unnecessary modules (inplace)
    local y_squash = squash_model(y_system, arg)

@@ -7,7 +7,6 @@
 --  of patent rights can be found in the PATENTS file in the same directory.
 --
 require 'image'
-require('pl.stringx').import()
 paths.dofile('dataset.lua')
 paths.dofile('util.lua')
 
@@ -25,40 +24,29 @@ if not os.execute('cd ' .. opt.data) then
     error(("could not chdir to '%s'"):format(opt.data))
 end
 
-local loadSize   = {3, opt.imageSize, opt.imageSize}
-local sampleSize = {3, opt.cropSize, opt.cropSize}
-
-if opt.imgExtInsensitive then
-   -- Overwrite image.load()
-   -- Load an image (with image.load()) regardless its extension
-   function image.load(p, n, t)
-      local img, ok
-      local f = io.open(p, 'r')
-      if f then
-         local h = f:read(4)
-         f:close()
-
-         if h:startswith(string.char(0xff, 0xd8, 0xff)) then
-            ok, img = pcall(image.loadJPG, p, n, t)
-         elseif h:startswith(string.char(0x89, 0x50, 0x4e, 0x47)) then
-            ok, img = pcall(image.loadPNG, p, n, t)
-         end
-      end
-
-      if ok and img:dim() == 3 and f then return img else
-         os.execute('echo "' .. p .. '" >> err.img')
-         return torch.FloatTensor(loadSize[1], loadSize[2], loadSize[3]):uniform()
-      end
-   end
-end
+local loadSize   = {3, 256, 256}
+local sampleSize = {3, 224, 224}
 
 local function loadImage(path)
-   local input = image.load(path, 3, 'float')
-   -- find the smaller dimension, and resize it to loadSize (while keeping aspect ratio)
-   if input:size(3) < input:size(2) then
-      input = image.scale(input, loadSize[2], loadSize[3] * input:size(2) / input:size(3))
+   local input = image.load(path)
+   if input:dim() == 2 then -- 1-channel image loaded as 2D tensor
+      input = input:view(1,input:size(1), input:size(2)):repeatTensor(3,1,1)
+   elseif input:dim() == 3 and input:size(1) == 1 then -- 1-channel image
+      input = input:repeatTensor(3,1,1)
+   elseif input:dim() == 3 and input:size(1) == 3 then -- 3-channel image
+   elseif input:dim() == 3 and input:size(1) == 4 then -- image with alpha
+      input = input[{{1,3},{},{}}]
    else
-      input = image.scale(input, loadSize[2] * input:size(3) / input:size(2), loadSize[3])
+      print(#input)
+      error('not 2-channel or 3-channel image')
+   end
+   -- find the smaller dimension, and resize it to 256 (while keeping aspect ratio)
+   local iW = input:size(3)
+   local iH = input:size(2)
+   if iW < iH then
+      input = image.scale(input, 256, 256 * iH / iW)
+   else
+      input = image.scale(input, 256 * iW / iH, 256)
    end
    return input
 end
@@ -75,19 +63,19 @@ local mean,std
 local trainHook = function(self, path)
    collectgarbage()
    local input = loadImage(path)
-   local iW = input:size(3)
-   local iH = input:size(2)
+   iW = input:size(3)
+   iH = input:size(2)
 
    -- do random crop
-   local oW = sampleSize[3]
+   local oW = sampleSize[3];
    local oH = sampleSize[2]
    local h1 = math.ceil(torch.uniform(1e-2, iH-oH))
    local w1 = math.ceil(torch.uniform(1e-2, iW-oW))
    local out = image.crop(input, w1, h1, w1 + oW, h1 + oH)
-   assert(out:size(3) == oW)
-   assert(out:size(2) == oH)
+   assert(out:size(2) == oW)
+   assert(out:size(3) == oH)
    -- do hflip with probability 0.5
-   if torch.uniform() > 0.5 then out = image.hflip(out) end
+   if torch.uniform() > 0.5 then out = image.hflip(out); end
    -- mean/std
    for i=1,3 do -- channels
       if mean then out[{{i},{},{}}]:add(-mean[i]) end
@@ -107,8 +95,8 @@ else
    print('Creating train metadata')
    trainLoader = dataLoader{
       paths = {paths.concat(opt.data, 'train')},
-      loadSize = loadSize,
-      sampleSize = sampleSize,
+      loadSize = {3, 256, 256},
+      sampleSize = {3, 224, 224},
       split = 100,
       verbose = true
    }
@@ -134,20 +122,20 @@ end
 --]]
 
 -- function to load the image
-testHook = function(self, path)
+local testHook = function(self, path)
    collectgarbage()
    local input = loadImage(path)
    local oH = sampleSize[2]
-   local oW = sampleSize[3]
-   local iW = input:size(3)
-   local iH = input:size(2)
+   local oW = sampleSize[3];
+   iW = input:size(3)
+   iH = input:size(2)
    local w1 = math.ceil((iW-oW)/2)
    local h1 = math.ceil((iH-oH)/2)
-   local out = image.crop(input, w1, h1, w1+oW, h1+oH) -- center patch
+   local out = image.crop(input, w1, h1, w1+oW, h1+oW) -- center patch
    -- mean/std
    for i=1,3 do -- channels
       if mean then out[{{i},{},{}}]:add(-mean[i]) end
-      if std then out[{{i},{},{}}]:div(std[i]) end
+      if  std then out[{{i},{},{}}]:div(std[i]) end
    end
    return out
 end
@@ -163,8 +151,8 @@ else
    print('Creating test metadata')
    testLoader = dataLoader{
       paths = {paths.concat(opt.data, 'val')},
-      loadSize = loadSize,
-      sampleSize = sampleSize,
+      loadSize = {3, 256, 256},
+      sampleSize = {3, 224, 224},
       split = 0,
       verbose = true,
       forceClasses = trainLoader.classes -- force consistent class indices between trainLoader and testLoader
@@ -181,43 +169,40 @@ if paths.filep(meanstdCache) then
    mean = meanstd.mean
    std = meanstd.std
    print('Loaded mean and std from cache.')
-elseif not opt.normalize then
-   local cache = {}
-   cache.mean = mean
-   cache.std = std
-   torch.save(meanstdCache, cache)
 else
-   local tm = torch.Timer()
-   local nSamples = 10000
-   print('Estimating the mean (per-channel, shared for all pixels) over ' .. nSamples .. ' randomly sampled training images')
-   local meanEstimate = {0,0,0}
-   for i=1,nSamples do
-      local img = trainLoader:sample(1)[1]
-      for j=1,3 do
-         meanEstimate[j] = meanEstimate[j] + img[j]:mean()
+   if opt.normalize then
+      local tm = torch.Timer()
+      local nSamples = 10000
+      print('Estimating the mean (per-channel, shared for all pixels) over ' .. nSamples .. ' randomly sampled training images')
+      local meanEstimate = {0,0,0}
+      for i=1,nSamples do
+         local img = trainLoader:sample(1)[1]
+         for j=1,3 do
+            meanEstimate[j] = meanEstimate[j] + img[j]:mean()
+         end
       end
-   end
-   for j=1,3 do
-      meanEstimate[j] = meanEstimate[j] / nSamples
-   end
-   mean = meanEstimate
+      for j=1,3 do
+         meanEstimate[j] = meanEstimate[j] / nSamples
+      end
+      mean = meanEstimate
 
-   print('Estimating the std (per-channel, shared for all pixels) over ' .. nSamples .. ' randomly sampled training images')
-   local stdEstimate = {0,0,0}
-   for i=1,nSamples do
-      local img = trainLoader:sample(1)[1]
-      for j=1,3 do
-         stdEstimate[j] = stdEstimate[j] + img[j]:std()
+      print('Estimating the std (per-channel, shared for all pixels) over ' .. nSamples .. ' randomly sampled training images')
+      local stdEstimate = {0,0,0}
+      for i=1,nSamples do
+         local img = trainLoader:sample(1)[1]
+         for j=1,3 do
+            stdEstimate[j] = stdEstimate[j] + img[j]:std()
+         end
       end
+      for j=1,3 do
+         stdEstimate[j] = stdEstimate[j] / nSamples
+      end
+      std = stdEstimate
+      print('Time to estimate:', tm:time().real)
    end
-   for j=1,3 do
-      stdEstimate[j] = stdEstimate[j] / nSamples
-   end
-   std = stdEstimate
 
    local cache = {}
    cache.mean = mean
    cache.std = std
    torch.save(meanstdCache, cache)
-   print('Time to estimate:', tm:time().real)
 end

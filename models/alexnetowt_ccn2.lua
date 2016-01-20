@@ -20,15 +20,27 @@ function createModel(nGPU)
    features:add(cudnn.ReLU(true))
    features:add(ccn2.SpatialMaxPooling(3,2))                   -- 13 -> 6
    features:add(nn.Transpose({4,1},{4,2},{4,3}))
-
-   features:cuda()
-   features = makeDataParallel(features, nGPU) -- defined in util.lua
+   if nGPU > 1 then
+      assert(nGPU <= cutorch.getDeviceCount(), 'number of GPUs less than nGPU specified')
+      local features_single = features
+      features = nn.DataParallel(1)
+      for i=1,nGPU do
+         cutorch.withDevice(i, function()
+                               features:add(features_single:clone())
+         end)
+      end
+      features.gradInput = nil
+   end
 
    local classifier = nn.Sequential()
    classifier:add(nn.View(256*6*6))
 
-   local branch1 = nn.Concat(2)
-
+   local branch1
+   if nGPU == 1 then
+      branch1 = nn.Concat(2)
+   else
+      branch1 = nn.ModelParallel(2)
+   end
    for i=1,nGPU do
       local s = nn.Sequential()
       s:add(nn.Dropout(0.5))
@@ -37,8 +49,12 @@ function createModel(nGPU)
       branch1:add(s)
    end
    classifier:add(branch1)
-
-   local branch2 = nn.Concat(2)
+   local branch2
+   if nGPU == 1 then
+      branch2 = nn.Concat(2)
+   else
+      branch2 = nn.ModelParallel(2)
+   end
    for i=1,nGPU do
       local s = nn.Sequential()
       s:add(nn.Dropout(0.5))
@@ -49,11 +65,8 @@ function createModel(nGPU)
    classifier:add(branch2)
    classifier:add(nn.Linear(4096, nClasses))
    classifier:add(nn.LogSoftMax())
-   classifier:cuda()
 
    local model = nn.Sequential():add(features):add(classifier)
-   model.imageSize = 256
-   model.imageCrop = 224
 
    return model
 end

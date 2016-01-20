@@ -1,20 +1,23 @@
-function createModel(nGPU)
-   require 'cudnn'
+require 'fbcunn'
+require 'cudnn'
 
+function createModel(nGPU)
    local features = nn.Sequential()
 
    features:add(cudnn.SpatialConvolution(3, 96, 11, 11, 4, 4))
    features:add(cudnn.ReLU(true))
    features:add(cudnn.SpatialMaxPooling(2, 2, 2, 2))
 
-   features:add(cudnn.SpatialConvolution(96, 256, 5, 5, 1, 1))
+   features:add(nn.SpatialConvolutionCuFFT(96, 256, 5, 5, 1, 1))
    features:add(cudnn.ReLU(true))
    features:add(cudnn.SpatialMaxPooling(2, 2, 2, 2))
 
-   features:add(cudnn.SpatialConvolution(256, 512, 3, 3, 1, 1, 1, 1))
+   features:add(nn.SpatialZeroPadding(1,1,1,1))
+   features:add(nn.SpatialConvolutionCuFFT(256, 512, 3, 3, 1, 1))
    features:add(cudnn.ReLU(true))
 
-   features:add(cudnn.SpatialConvolution(512, 1024, 3, 3, 1, 1, 1, 1))
+   features:add(nn.SpatialZeroPadding(1,1,1,1))
+   features:add(nn.SpatialConvolutionCuFFT(512, 1024, 3, 3, 1, 1))
    features:add(cudnn.ReLU(true))
 
    features:add(cudnn.SpatialConvolution(1024, 1024, 3, 3, 1, 1, 1, 1))
@@ -39,6 +42,7 @@ function createModel(nGPU)
    if nGPU > 1 then
       assert(nGPU <= cutorch.getDeviceCount(), 'number of GPUs less than nGPU specified')
       local features_single = features
+      require 'fbcunn'
       features = nn.DataParallel(1)
       for i=1,nGPU do
          cutorch.withDevice(i, function()
@@ -48,5 +52,6 @@ function createModel(nGPU)
    end
 
    local model = nn.Sequential():add(features):add(classifier)
+
    return model
 end

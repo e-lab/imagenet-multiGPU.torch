@@ -8,7 +8,6 @@
 --
 local ffi = require 'ffi'
 local Threads = require 'threads'
-Threads.serialization('threads.sharedserialize')
 
 -- This script contains the logic to create K threads for parallel data-loading.
 -- For the data-loading details, look at donkey.lua
@@ -38,18 +37,15 @@ do -- start K datathreads (donkeys)
    end
 end
 
+-- creating and saving <classes> and <revClasses>
 nClasses = nil
 classes = nil
 donkeys:addjob(function() return trainLoader.classes end, function(c) classes = c end)
 donkeys:synchronize()
 nClasses = #classes
 assert(nClasses, "Failed to get nClasses")
-assert(nClasses == opt.nClasses,
-       "nClasses is reported different in the data loader, and in the commandline options")
 print('nClasses: ', nClasses)
-torch.save(paths.concat(opt.save, 'classes.t7'), classes)
 
--- creating and saving <classes> and <revClasses>
 local revClasses = {}
 for i, c in ipairs(classes) do revClasses[c] = i end
 torch.save(paths.concat(opt.save, 'aux.t7'), {

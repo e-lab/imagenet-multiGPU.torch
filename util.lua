@@ -1,60 +1,54 @@
 local ffi=require 'ffi'
+------ Some FFI stuff used to pass storages between threads ------------------
+ffi.cdef[[
+void THFloatStorage_free(THFloatStorage *self);
+void THLongStorage_free(THLongStorage *self);
+]]
 
-function makeDataParallel(model, nGPU)
-   if nGPU > 1 then
-      print('converting module to nn.DataParallelTable')
-      assert(nGPU <= cutorch.getDeviceCount(), 'number of GPUs less than nGPU specified')
-      local model_single = model
-      model = nn.DataParallelTable(1)
-      for i=1, nGPU do
-         cutorch.setDevice(i)
-         model:add(model_single:clone():cuda(), i)
-      end
-      cutorch.setDevice(opt.GPU)
+function setFloatStorage(tensor, storage_p)
+   assert(storage_p and storage_p ~= 0, "FloatStorage is NULL pointer");
+   local cstorage = ffi.cast('THFloatStorage*', torch.pointer(tensor:storage()))
+   if cstorage ~= nil then
+      ffi.C['THFloatStorage_free'](cstorage)
    end
-   return model
+   local storage = ffi.cast('THFloatStorage*', storage_p)
+   tensor:cdata().storage = storage
 end
 
-local function cleanDPT(module)
-   -- This assumes this DPT was created by the function above: all the
-   -- module.modules are clones of the same network on different GPUs
-   -- hence we only need to keep one when saving the model to the disk.
-   local newDPT = nn.DataParallelTable(1)
-   cutorch.setDevice(opt.GPU)
-   newDPT:add(module:get(1), opt.GPU)
-   return newDPT
+function setLongStorage(tensor, storage_p)
+   assert(storage_p and storage_p ~= 0, "LongStorage is NULL pointer");
+   local cstorage = ffi.cast('THLongStorage*', torch.pointer(tensor:storage()))
+   if cstorage ~= nil then
+      ffi.C['THLongStorage_free'](cstorage)
+   end
+   local storage = ffi.cast('THLongStorage*', storage_p)
+   tensor:cdata().storage = storage
 end
 
-function saveDataParallel(filename, model)
-   if torch.type(model) == 'nn.DataParallelTable' then
-      torch.save(filename, cleanDPT(model))
-   elseif torch.type(model) == 'nn.Sequential' then
-      local temp_model = nn.Sequential()
-      for i, module in ipairs(model.modules) do
-         if torch.type(module) == 'nn.DataParallelTable' then
-            temp_model:add(cleanDPT(module))
-         else
-            temp_model:add(module)
-         end
-      end
-      torch.save(filename, temp_model)
+function sendTensor(inputs)
+   local size = inputs:size()
+   local ttype = inputs:type()
+   local i_stg =  tonumber(ffi.cast('intptr_t', torch.pointer(inputs:storage())))
+   inputs:cdata().storage = nil
+   return {i_stg, size, ttype}
+end
+
+function receiveTensor(obj, buffer)
+   local pointer = obj[1]
+   local size = obj[2]
+   local ttype = obj[3]
+   if buffer then
+      buffer:resize(size)
+      assert(buffer:type() == ttype, 'Buffer is wrong type')
    else
-      error('This saving function only works with Sequential or DataParallelTable modules.')
+      buffer = torch[ttype].new():resize(size)      
    end
-end
-
-function loadDataParallel(filename, nGPU)
-   local model = torch.load(filename)
-   if torch.type(model) == 'nn.DataParallelTable' then
-      return makeDataParallel(model:get(1):float(), nGPU)
-   elseif torch.type(model) == 'nn.Sequential' then
-      for i,module in ipairs(model.modules) do
-         if torch.type(module) == 'nn.DataParallelTable' then
-            model.modules[i] = makeDataParallel(module:get(1):float(), nGPU)
-         end
-      end
-      return model
+   if ttype == 'torch.FloatTensor' then
+      setFloatStorage(buffer, pointer)
+   elseif ttype == 'torch.LongTensor' then
+      setLongStorage(buffer, pointer)
    else
-      error('The loaded model is not a Sequential or DataParallelTable module.')
+      error('Unknown type')
    end
+   return buffer
 end
