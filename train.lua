@@ -183,12 +183,29 @@ function trainBatch(inputsCPU, labelsCPU)
    feval = function(x)
       model:zeroGradParameters()
       outputs = model:forward(inputs)
-      err = criterion:forward(outputs, labels)
-      local gradOutputs = criterion:backward(outputs, labels)
+      local model_outputs = outputs:sub(1, -1, 1, nClasses)
+      err = criterion:forward(model_outputs, labels)
+      local gradOutputs = criterion:backward(model_outputs, labels)
+
+      if model.auxClassifiers and model.auxClassifiers > 0 then
+         local allGradOutputs = torch.Tensor():typeAs(gradOutputs):resizeAs(outputs)
+         allGradOutputs:sub(1, -1, 1, nClasses):copy(gradOutputs)
+         for i=1,model.auxClassifiers do
+            local first = i * nClasses + 1
+            local last = (i+1) * nClasses
+            local classifier_outputs = outputs:sub(1, -1, first, last)
+            criterion:forward(classifier_outputs, labels)
+            local auxGradOutput = criterion:backward(classifier_outputs, labels) * model.auxWeights[i]
+            allGradOutputs:sub(1, -1, first, last):copy(auxGradOutput)
+         end
+         gradOutputs = allGradOutputs
+      end
+
       model:backward(inputs, gradOutputs)
       return err, gradParameters
    end
    optim.sgd(feval, parameters, optimState)
+   local modelOutputs = outputs:sub(1, -1, 1, nClasses):float()
 
    -- DataParallelTable's syncParameters
    model:apply(function(m) if m.syncParameters then m:syncParameters() end end)
@@ -199,7 +216,7 @@ function trainBatch(inputsCPU, labelsCPU)
    -- top-1 error
    local top1 = 0
    do
-      local _,prediction_sorted = outputs:float():sort(2, true) -- descending
+      local _,prediction_sorted = modelOutputs:sort(2, true) -- descending
       for i=1,opt.batchSize do
 	 if prediction_sorted[i][1] == labelsCPU[i] then
 	    top1_epoch = top1_epoch + 1;
@@ -213,7 +230,7 @@ function trainBatch(inputsCPU, labelsCPU)
           epoch, batchNumber, opt.epochSize, timer:time().real, err, top1,
           optimState.learningRate, dataLoadingTime))
 
-   if trainConf then trainConf:batchAdd(outputs:float(), labelsCPU) end
+   if trainConf then trainConf:batchAdd(modelOutputs, labelsCPU) end
 
    dataTimer:reset()
 end
