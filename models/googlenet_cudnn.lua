@@ -80,6 +80,8 @@ function createModel(nGPU)
    model = makeDataParallel(model, nGPU) -- defined in util.lua
    model.imageSize = 256
    model.imageCrop = 224
+   model.auxClassifiers = 1
+   model.auxWeights = {0.3}
 
 
    return model
