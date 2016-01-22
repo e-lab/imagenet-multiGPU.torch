@@ -186,14 +186,34 @@ function trainBatch(inputsCPU, labelsCPU)
    local dataLoadingTime = dataTimer:time().real
    timer:reset()
 
-   local err, outputs
    local outputsCPU = torch.FloatTensor(opt.batchSize, nClasses)
+
+   local err, auxerr, totalerr, outputs
    feval = function(x)
       outputs = model:forward(inputs)
-      err = criterion:forward(outputs, labels)
-      local gradOutputs = criterion:backward(outputs, labels)
+      local model_outputs = outputs:sub(1, -1, 1, nClasses)
+      err = criterion:forward(model_outputs, labels)
+      totalerr = err
+      local gradOutputs = criterion:backward(model_outputs, labels)
+
+      if model.auxClassifiers and model.auxClassifiers > 0 then
+         local allGradOutputs = torch.Tensor():typeAs(gradOutputs):resizeAs(outputs)
+         allGradOutputs:sub(1, -1, 1, nClasses):copy(gradOutputs)
+         auxerr = {}
+         for i=1,model.auxClassifiers do
+            local first = i * nClasses + 1
+            local last = (i+1) * nClasses
+            local classifier_outputs = outputs:sub(1, -1, first, last)
+            auxerr[i] = criterion:forward(classifier_outputs, labels)
+            totalerr = totalerr + auxerr[i] * model.auxWeights[i]
+            local auxGradOutput = criterion:backward(classifier_outputs, labels) * model.auxWeights[i]
+            allGradOutputs:sub(1, -1, first, last):copy(auxGradOutput)
+         end
+         gradOutputs = allGradOutputs
+      end
+
       model:backward(inputs, gradOutputs)
-      return err, gradParameters
+      return totalerr, gradParameters
    end
 
    local chunkedInputsCPU, chunkedLabelsCPU
@@ -217,6 +237,7 @@ function trainBatch(inputsCPU, labelsCPU)
    if opt.batchChunks > 1 then
       gradParameters:mul(1.0 / opt.batchChunks)
    end
+   outputsCPU = outputsCPU:sub(1, -1, 1, nClasses)
 
    -- DataParallelTable's syncParameters
    model:apply(function(m) if m.syncParameters then m:syncParameters() end end)
@@ -236,10 +257,17 @@ function trainBatch(inputsCPU, labelsCPU)
       end
       top1 = top1 * 100 / opt.batchSize;
    end
-   -- Calculate top-1 error, and print information
+
    print(('Epoch: [%d][%d/%d]\tTime %.3f Err %.4f Top1-%%: %.2f LR %.0e DataLoadingTime %.3f'):format(
-          epoch, batchNumber, opt.epochSize, timer:time().real, err, top1,
+          epoch, batchNumber, opt.epochSize, timer:time().real, totalerr, top1,
           optimState.learningRate, dataLoadingTime))
+
+   if model.auxClassifiers and model.auxClassifiers > 0 then
+      print(string.format('\t  main model: Err %.4f', err))
+      for i=1,model.auxClassifiers do
+         print(string.format('\tclassifier %d: Err %.4f (* %.1f = %.4f)', i, auxerr[i], model.auxWeights[i], auxerr[i] * model.auxWeights[i]))
+      end
+   end
 
    if trainConf then trainConf:batchAdd(outputsCPU, labelsCPU) end
 
