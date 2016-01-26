@@ -211,6 +211,7 @@ function trainBatch(inputsCPU, labelsCPU)
          end
          gradOutputs = allGradOutputs
       end
+      gradOutputs:mul(1.0 / opt.batchChunks)
 
       model:backward(inputs, gradOutputs)
       return totalerr, gradParameters
@@ -233,9 +234,6 @@ function trainBatch(inputsCPU, labelsCPU)
       transferToGPU(chunk_start, chunk_end)
       optim.sgd(feval, parameters, optimState)
       outputsCPU:sub(chunk_start, chunk_end):copy(outputs)
-   end
-   if opt.batchChunks > 1 then
-      gradParameters:mul(1.0 / opt.batchChunks)
    end
    outputsCPU = outputsCPU:sub(1, -1, 1, nClassesI)
 
