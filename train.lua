@@ -211,6 +211,8 @@ function trainBatch(inputsCPU, labelsCPU)
          end
          gradOutputs = allGradOutputs
       end
+      -- This division could go into chunkedFeval but is in here for performance reasons
+      gradOutputs:mul(1.0 / opt.batchChunks)
 
       model:backward(inputs, gradOutputs)
       return totalerr, gradParameters
@@ -224,27 +226,33 @@ function trainBatch(inputsCPU, labelsCPU)
       labels:resize(chunkedLabelsCPU:size()):copy(chunkedLabelsCPU)
    end
 
+   -- This simulates feval by dividing every batch into chunks and calling
+   -- the original function
+   local chunkedFeval = function(x)
+      local chunk_size = math.floor(opt.batchSize / opt.batchChunks)
+      local err_accumulator = 0
+      for i=1,opt.batchChunks do
+         local chunk_start = chunk_size * (i-1) + 1
+         -- Take all remaining samples in the last iteration
+         local chunk_end = i < opt.batchChunks and chunk_size * i or -1
+         transferToGPU(chunk_start, chunk_end)
+         local loss, _ = feval(x)
+         err_accumulator = err_accumulator + loss
+         outputsCPU:sub(chunk_start, chunk_end):copy(outputs:sub(1, -1, 1, nClasses))
+      end
+      totalerr = err_accumulator / opt.batchChunks
+      return total_loss, gradParameters
+   end
+
    model:zeroGradParameters()
-   local chunk_size = math.floor(opt.batchSize / opt.batchChunks)
-   for i=1,opt.batchChunks do
-      local chunk_start = chunk_size * (i-1) + 1
-      -- Take all remaining samples in the last iteration
-      local chunk_end = i < opt.batchChunks and chunk_size * i or -1
-      transferToGPU(chunk_start, chunk_end)
-      optim.sgd(feval, parameters, optimState)
-      outputsCPU:sub(chunk_start, chunk_end):copy(outputs)
-   end
-   if opt.batchChunks > 1 then
-      gradParameters:mul(1.0 / opt.batchChunks)
-   end
-   outputsCPU = outputsCPU:sub(1, -1, 1, nClasses)
+   optim.sgd(chunkedFeval, parameters, optimState)
 
    -- DataParallelTable's syncParameters
    model:apply(function(m) if m.syncParameters then m:syncParameters() end end)
 
    cutorch.synchronize()
    batchNumber = batchNumber + 1
-   loss_epoch = loss_epoch + err
+   loss_epoch = loss_epoch + totalerr
    -- top-1 error
    local top1 = 0
    do
