@@ -124,61 +124,7 @@ end
 
 
 local function switch_backend(x)
-   -- convert cuda objects to nn
-   for i = #x.modules, 1, -1 do
-      if x.modules[i].__typename == 'nn.Sequential' then
-         switch_backend(x.modules[i])
-      elseif x.modules[i].__typename == 'nn.Parallel' then
-         switch_backend(x.modules[i])
-      elseif x.modules[i].__typename == 'nn.Concat' then
-         switch_backend(x.modules[i])
-      elseif x.modules[i].__typename == 'nn.Transpose' then
-         x:remove(i)
-      else
-         -- handle cudnn
-         if x.modules[i].__typename == 'cudnn.SpatialConvolution' then
-            local t = x.modules[i]
-            x:remove(i)
-            x:insert(nn.SpatialConvolutionMM(t.nInputPlane, t.nOutputPlane,
-                                             t.kW, t.kH, t.dW, t.dH, t.padW, t.padH), i)
-            x.modules[i].weight:copy(t.weight)
-            x.modules[i].bias:copy(t.bias)
-         elseif x.modules[i].__typename == 'cudnn.SpatialMaxPooling' then
-            local t = x.modules[i]
-            x:remove(i)
-            x:insert(nn.SpatialMaxPooling(t.kW, t.kH, t.dW, t.dH), i)
-         elseif x.modules[i].__typename == 'cudnn.SpatialAveragePooling' then
-            local t = x.modules[i]
-            assert((t.padW == 0) and (t.padH == 0))
-            x:remove(i)
-            x:insert(nn.SpatialAveragePooling(t.kW, t.kH, t.dW, t.dH), i)
-         elseif x.modules[i].__typename == 'cudnn.ReLU' then
-            local t = x.modules[i]
-            x:remove(i)
-            x:insert(nn.ReLU(t.inplace), i)
-
-         -- handle cuda-convnet2
-         elseif x.modules[i].__typename == 'ccn2.SpatialConvolution' then
-            local t = x.modules[i]
-            x:remove(i)
-            x:insert(nn.SpatialConvolutionMM(t.nInputPlane, t.nOutputPlane,
-                                             t.kW, t.kW, t.dW, t.dW, t.padding, t.padding), i)
-            x.modules[i].weight:copy(t.weight:t())
-            x.modules[i].bias:copy(t.bias)
-         elseif x.modules[i].__typename == 'ccn2.SpatialMaxPooling' then
-            local t = x.modules[i]
-            x:remove(i)
-            x:insert(nn.SpatialMaxPooling(t.kW, t.kW, t.dW, t.dW), i)
-         elseif x.modules[i].__typename == 'ccn2.SpatialAvgPooling' then
-            local t = x.modules[i]
-            x:remove(i)
-            x:insert(nn.SpatialAveragePooling(t.kW, t.kW, t.dW, t.dW), i)
-         end
-      end
-   end
-
-   collectgarbage()
-   return x
+   return cudnn.convert(x, nn)
 end
 
 
@@ -191,6 +137,8 @@ local function squash_model(x, state)
          squash_model(x.modules[i], state)
       elseif x.modules[i].__typename == 'nn.Concat' then
          squash_model(x.modules[i], state)
+      elseif x.modules[i].__typename == 'nn.ConcatTable' then
+         squash_model(x.modules[i], state)
       else
          -- remove dropout
          if state.dropout then
@@ -200,34 +148,70 @@ local function squash_model(x, state)
             end
          end
 
-         local absorb_bn = function (w, b, mean, std, affine, gamma, beta)
-            w:cmul(std:view(w:size(1),1):repeatTensor(1,w:size(2)))
-            b:add(-mean):cmul(std)
+         local absorb_bn_conv = function (w, b, mean, invstd, affine, gamma, beta)
+            w:cmul(invstd:view(w:size(1),1):repeatTensor(1,w:nElement()/w:size(1)))
+            b:add(-mean):cmul(invstd)
 
             if affine then
-               w:cmul(gamma:view(w:size(1),1):repeatTensor(1,w:size(2)))
+               w:cmul(gamma:view(w:size(1),1):repeatTensor(1,w:nElement()/w:size(1)))
+               b:cmul(gamma):add(beta)
+            end
+         end
+
+         local absorb_bn_deconv = function (w, b, mean, invstd, affine, gamma, beta)
+            w:cmul(invstd:view(b:size(1),1):repeatTensor(w:size(1),w:nElement()/w:size(1)/b:nElement()))
+            b:add(-mean):cmul(invstd)
+
+            if affine then
+               w:cmul(gamma:view(b:size(1),1):repeatTensor(w:size(1),w:nElement()/w:size(1)/b:nElement()))
                b:cmul(gamma):add(beta)
             end
          end
 
          -- remove batch normalization
          if state.batchnorm then
-            if x.modules[i].__typename == 'nn.SpatialBatchNormalization' or
-               x.modules[i].__typename == 'nn.BatchNormalization' then
+            if x.modules[i].__typename == 'nn.SpatialBatchNormalization' then
                if x.modules[i-1] and
-                 (x.modules[i-1].__typename == 'nn.SpatialConvolutionMM' or
-                  x.modules[i-1].__typename == 'nn.Linear') then
-                  absorb_bn(x.modules[i-1].weight,
-                            x.modules[i-1].bias,
-                            x.modules[i].running_mean,
-                            x.modules[i].running_std or x.modules[i].running_var, -- backward compat
-                            x.modules[i].affine,
-                            x.modules[i].weight,
-                            x.modules[i].bias)
+                 (x.modules[i-1].__typename == 'nn.SpatialConvolution' or
+                  x.modules[i-1].__typename == 'nn.SpatialConvolutionMM') then
+                  absorb_bn_conv(x.modules[i-1].weight,
+                                 x.modules[i-1].bias,
+                                 x.modules[i].running_mean,
+                                 x.modules[i].running_var:clone():sqrt():add(x.modules[i].eps):pow(-1),
+                                 x.modules[i].affine,
+                                 x.modules[i].weight,
+                                 x.modules[i].bias)
+                  x:remove(i)
+                  i = i - 1
+               elseif x.modules[i-1] and
+                     (x.modules[i-1].__typename == 'nn.SpatialFullConvolution') then
+                  absorb_bn_deconv(x.modules[i-1].weight,
+                                   x.modules[i-1].bias,
+                                   x.modules[i].running_mean,
+                                   x.modules[i].running_var:clone():sqrt():add(x.modules[i].eps):pow(-1),
+                                   x.modules[i].affine,
+                                   x.modules[i].weight,
+                                   x.modules[i].bias)
                   x:remove(i)
                   i = i - 1
                else
-                  assert(false)
+                  assert(false, 'Convolution module must exist right before batch normalization layer')
+               end
+
+            elseif x.modules[i].__typename == 'nn.BatchNormalization' then
+               if x.modules[i-1] and
+                 (x.modules[i-1].__typename == 'nn.Linear') then
+                  absorb_bn_conv(x.modules[i-1].weight,
+                                 x.modules[i-1].bias,
+                                 x.modules[i].running_mean,
+                                 x.modules[i].running_std,
+                                 x.modules[i].affine,
+                                 x.modules[i].weight,
+                                 x.modules[i].bias)
+                  x:remove(i)
+                  i = i - 1
+               else
+                  assert(false, 'Convolution module must exist right before batch normalization layer')
                end
             end
          end
