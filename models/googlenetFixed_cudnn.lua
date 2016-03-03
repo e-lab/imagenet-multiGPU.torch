@@ -104,7 +104,7 @@ function createModel(nGPU)
    sftMx0:add(nn.View(128*4*4):setNumInputDims(3))
    sftMx0:add(nn.Linear(128*4*4, 1024)):add(nn.ReLU())
    sftMx0:add(nn.Dropout(0.7))
-   sftMx0:add(nn.Linear(1024, 1000)):add(nn.ReLU())
+   sftMx0:add(nn.Linear(1024, nClasses)):add(nn.ReLU())
    sftMx0:add(nn.LogSoftMax())
 
    local sftMx1 = nn.Sequential() -- softMax1
@@ -113,14 +113,14 @@ function createModel(nGPU)
    sftMx1:add(nn.View(128*4*4):setNumInputDims(3))
    sftMx1:add(nn.Linear(128*4*4, 1024)):add(nn.ReLU())
    sftMx1:add(nn.Dropout(0.7))
-   sftMx1:add(nn.Linear(1024, 1000)):add(nn.ReLU())
+   sftMx1:add(nn.Linear(1024, nClasses)):add(nn.ReLU())
    sftMx1:add(nn.LogSoftMax())
 
    local sftMx2 = nn.Sequential() -- softMax2
    sftMx2:add(cudnn.SpatialAveragePooling(7, 7, 1, 1))
    sftMx2:add(nn.View(1024):setNumInputDims(3))
    sftMx2:add(nn.Dropout(0.4))
-   sftMx2:add(nn.Linear(1024, 1000)):add(nn.ReLU()) -- 22
+   sftMx2:add(nn.Linear(1024, nClasses)):add(nn.ReLU()) -- 22
    sftMx2:add(nn.LogSoftMax())
 
    -- Macro blocks -------------------------------------------------------------
@@ -149,7 +149,11 @@ function createModel(nGPU)
 
    -- Play safe with GPUs ------------------------------------------------------
    model:cuda()
-   --model = makeDataParallel(model, nGPU) -- defined in util.lua
+   model = makeDataParallel(model, nGPU) -- defined in util.lua
+   model.imageSize = 256
+   model.imageCrop = 224
+   model.auxClassifiers = 2
+   model.auxWeights = {0.3, 0.3}
 
    return model
 end
