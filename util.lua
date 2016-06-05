@@ -58,7 +58,37 @@ function loadDataParallel(filename, nGPU)
       error('The loaded model is not a Sequential or DataParallelTable module.')
    end
 end
-
+function loadDataParallelLastLayerOnly(filename, nGPU)
+   local model = torch.load(filename)
+   local nlayers = #model
+   local featuressize = model.modules[nlayers].weight:size(2)
+   model.modules[nlayers] = nil  -- deleting nn.Linear layer
+   local linear = nn.Linear(featuressize, nClasses)
+   model:add(linear:cuda()):add(nn.LogSoftMax():cuda())
+   if torch.type(model) == 'nn.DataParallelTable' then
+      return makeDataParallel(model:get(1):float(), nGPU)
+   elseif torch.type(model) == 'nn.Sequential' then
+      for i,module in ipairs(model.modules) do
+         if torch.type(module) == 'nn.DataParallelTable' then
+            model.modules[i] = makeDataParallel(module:get(1):float(), nGPU)
+         end
+      end
+      return model
+   else
+      error('The loaded model is not a Sequential or DataParallelTable module.')
+   end
+end
+function splitModel(model)
+      local nlayers = model.modules[2]:size()
+      model.modules[2].modules[nlayers] = nil  -- deleting nn.LogSoftMax layer
+      local featuressize = model.modules[2].modules[nlayers - 1].weight:size(2)
+      print(featuressize)
+      model.modules[2].modules[nlayers - 1] = nil --deleting nn.Liner
+      local last = nn.Sequential()
+      local linear = nn.Linear(featuressize, nClasses)
+      last:add(linear:cuda()):add(nn.LogSoftMax())
+      return model, last
+end
 function saveRNGState(filename, donkeys, num_donkeys)
    local state = {}
    state.cpu = torch.getRNGState()

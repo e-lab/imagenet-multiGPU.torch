@@ -171,8 +171,14 @@ local labels = torch.CudaTensor()
 
 local timer = torch.Timer()
 local dataTimer = torch.Timer()
-
-local parameters, gradParameters = model:getParameters()
+local parameters, gradParameters
+-- Get only lastlayer parameters if want to train lastLayer only
+if opt.lastLayer == 'lastLayerOnly' then
+   parameters, gradParameters = model.modules[#model.modules-1]:getParameters()
+   print(parameters:size())
+else
+   parameters, gradParameters = model:getParameters()
+end
 
 -- 4. trainBatch - Used by train() to train a single batch after the data is loaded.
 function trainBatch(inputsCPU, labelsCPU)
