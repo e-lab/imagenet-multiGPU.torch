@@ -48,8 +48,39 @@ end
 -- Return values:
 --    diff to apply to optimState,
 --    true IFF this is the first epoch of a new regime
-selectParamsForEpoch:init(epoch,opt)
-paramsForEpoch = selectParamsForEpoch.update
+local paramsForEpoch
+if opt.regimes == 'res' then
+   function paramsForEpoch(epoch)
+      local decay = 0
+      if epoch == 1 then
+      learningRate =  0.1
+      else
+         decay = math.floor((epoch - 1) / 30)
+         learningRate = learningRate * math.pow(0.1,decay)
+      end
+      return { learningRate=learningRate , weightDecay= math.floor((epoch - 1) / 30) }, true
+   end
+else
+   function paramsForEpoch(epoch)
+       if opt.LR ~= 0.0 then -- if manually specified
+           return { }
+       end
+       local regimes = {
+           -- start, end,    LR,   WD,
+           {  1,     18,   1e-2,   5e-4, },
+           { 19,     29,   5e-3,   5e-4  },
+           { 30,     43,   1e-3,   0 },
+           { 44,     52,   5e-4,   0 },
+           { 53,    1e8,   1e-4,   0 },
+       }
+
+       for _, row in ipairs(regimes) do
+           if epoch >= row[1] and epoch <= row[2] then
+               return { learningRate=row[3], weightDecay=row[4] }, epoch == row[1]
+           end
+       end
+   end
+end
 
 -- 2. Create loggers.
 trainLogger = optim.Logger(paths.concat(opt.save, 'train.log'))
@@ -235,7 +266,6 @@ function trainBatch(inputsCPU, labelsCPU)
    else
       error('Wrong opt.optimizer should be sgd or adam')
    end
-
 
    -- DataParallelTable's syncParameters
    model:apply(function(m) if m.syncParameters then m:syncParameters() end end)

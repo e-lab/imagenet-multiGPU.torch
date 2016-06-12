@@ -5,7 +5,7 @@ function makeDataParallel(model, nGPU)
       print('converting module to nn.DataParallelTable')
       assert(nGPU <= cutorch.getDeviceCount(), 'number of GPUs less than nGPU specified')
       local model_single = model
-      model = nn.DataParallelTable(1)
+      model = nn.DataParallelTable(1,true,true)
       for i=1, nGPU do
          cutorch.setDevice(i)
          model:add(model_single:clone():cuda(), i)
@@ -19,7 +19,7 @@ local function cleanDPT(module)
    -- This assumes this DPT was created by the function above: all the
    -- module.modules are clones of the same network on different GPUs
    -- hence we only need to keep one when saving the model to the disk.
-   local newDPT = nn.DataParallelTable(1)
+   local newDPT = nn.DataParallelTable(1,true,true)
    cutorch.setDevice(opt.GPU)
    newDPT:add(module:get(1), opt.GPU)
    return newDPT
@@ -108,56 +108,3 @@ function loadRNGState(filename, donkeys, num_donkeys)
       donkeys:specific(false)
    end
 end
-
-selectParamsForEpoch = {}
-
-function noResnetParamsForEpoch(epoch)
-    if opt.LR ~= 0.0 then -- if manually specified
-        return { }
-    end
-    local regimes = {
-        -- start, end,    LR,   WD,
-        {  1,     18,   1e-2,   5e-4, },
-        { 19,     29,   5e-3,   5e-4  },
-        { 30,     43,   1e-3,   0 },
-        { 44,     52,   5e-4,   0 },
-        { 53,    1e8,   1e-4,   0 },
-    }
-
-    for _, row in ipairs(regimes) do
-        if epoch >= row[1] and epoch <= row[2] then
-            return { learningRate=row[3], weightDecay=row[4] }, epoch == row[1]
-        end
-    end
-end
-
-function resnetParamsForEpoch(epoch)
-   local decay = 0
-   if epoch == 1 then
-   learningRate =  0.1
-   else
-      decay = math.floor((epoch - 1) / 30)
-      learningRate = learningRate * math.pow(0.1,decay)
-   end
-   return { learningRate=learningRate , weightDecay= math.floor((epoch - 1) / 30) }, true
-end
-
-function initSelectParamsForEpoch(epoch, opt)
-   if opt.regimes == 'res' then
-      selectParamsForEpoch.update =
-      function (epoch)
-         return resnetParamsForEpoch(epoch)
-      end
-   else
-      selectParamsForEpoch.update =
-      function (epoch)
-         return noResnetParamsForEpoch(epoch)
-      end
-   end
-end
-
-function selectParamsForEpoch:init(epoch, opt)
-   initSelectParamsForEpoch(epoch, opt)
-end
-
-return selectParamsForEpoch
