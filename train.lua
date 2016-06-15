@@ -51,14 +51,18 @@ end
 local paramsForEpoch
 if opt.regimes == 'res' then
    function paramsForEpoch(epoch)
-      local decay = 0
+      local decay = 0, lr
       if epoch == 1 then
-      learningRate =  0.1
+         if opt.LR ~= 0 then
+            lr =  opt.LR
+         else
+            lr = 0.1
+         end
       else
          decay = math.floor((epoch - 1) / 30)
-         learningRate = learningRate * math.pow(0.1,decay)
+         lr= lr * math.pow(0.1,decay)
       end
-      return { learningRate=learningRate , weightDecay= math.floor((epoch - 1) / 30) }, true
+      return { learningRate = lr , weightDecay= math.floor((epoch - 1) / 30) }, true
    end
 else
    function paramsForEpoch(epoch)
