@@ -14,14 +14,14 @@ function M.parse(arg)
     cmd:text('Torch-7 Imagenet Training script')
     cmd:text()
     cmd:text('Options:')
-    cmd:text('------------ General options --------------------')
-    cmd:option('-cache', './results', 'subdirectory in which to save/log experiments')
-    cmd:option('-data', './dataset', 'path to source dataset')
+    ------------ General options --------------------
+    cmd:option('-cache', './imagenet/checkpoint/', 'subdirectory in which to save/log experiments')
+    cmd:option('-data', './imagenet/imagenet_raw_images/256', 'Home of ImageNet dataset')
     cmd:option('-manualSeed',         2, 'Manually set RNG seed')
     cmd:option('-GPU',                1, 'Default preferred GPU')
     cmd:option('-nGPU',               1, 'Number of GPUs to use by default')
-    cmd:option('-backend',     'cudnn', 'Options: cudnn | ccn2 | cunn')
-    cmd:text('------------- Data options ------------------------')
+    cmd:option('-backend',     'cudnn', 'Options: cudnn | nn')
+    ------------- Data options ------------------------
     cmd:option('-nDonkeys',        2, 'number of donkeys to initialize (data loading threads)')
     cmd:option('-normalize',    true, 'globally normalize samples during training')
     cmd:option('-imgExtInsensitive', false, 'load JPEGs and PNGs regardless the file name extension')
@@ -56,9 +56,10 @@ function M.parse(arg)
     local date = os.date('%Y')..os.date('%m')..os.date('%d')
     local time = os.date('%H')..os.date('%M')..os.date('%S')
     opt.save = paths.concat(opt.cache,
-                            date.. '-' .. time .. '-' ..
                             cmd:string(opt.netType, opt,
-                                       {retrain=true, optimState=true, cache=true, data=true, rngState=true}))
+                                       {netType=true, retrain=true, optimState=true, cache=true, data=true}))
+    -- add date/time
+    opt.save = paths.concat(opt.save, '' .. os.date():gsub(' ',''))
     return opt
 end
 
