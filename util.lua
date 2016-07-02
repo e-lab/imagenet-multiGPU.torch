@@ -1,3 +1,4 @@
+require 'cunn'
 local ffi=require 'ffi'
 
 function makeDataParallel(model, nGPU)
@@ -10,8 +11,9 @@ function makeDataParallel(model, nGPU)
          cutorch.setDevice(i)
          model:add(model_single:clone():cuda(), i)
       end
-      cutorch.setDevice(opt.GPU)
    end
+   cutorch.setDevice(opt.GPU)
+
    return model
 end
 
@@ -44,6 +46,9 @@ function saveDataParallel(filename, model)
 end
 
 function loadDataParallel(filename, nGPU)
+   if opt.backend == 'cudnn' then
+      require 'cudnn'
+   end
    local model = torch.load(filename)
    if torch.type(model) == 'nn.DataParallelTable' then
       return makeDataParallel(model:get(1):float(), nGPU)

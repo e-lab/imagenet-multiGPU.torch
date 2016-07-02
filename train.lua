@@ -144,22 +144,7 @@ function train()
 
    -- clear the intermediate states in the model before saving to disk
    -- this saves lots of disk space
-   local function sanitize(net)
-      local list = net:listModules()
-      for _,val in ipairs(list) do
-         for name,field in pairs(val) do
-            if torch.type(field) == 'cdata' then val[name] = nil end
-            if (name == 'output' or name == 'gradInput') then
-               if torch.isTensor(val[name]) then
-                  val[name] = field.new()
-               elseif torch.type(val[name]) == 'table' then
-                  val[name] = {}
-               end
-            end
-         end
-      end
-   end
-   sanitize(model)
+   model:clearState()
    saveDataParallel(paths.concat(opt.save, 'model_' .. epoch .. '.t7'), model) -- defined in util.lua
    saveRNGState(paths.concat(opt.save, 'rngState_' .. epoch .. '.t7'), donkeys, opt.nDonkeys) -- defined in util.lua
    torch.save(paths.concat(opt.save, 'optimState_' .. epoch .. '.t7'), optimState)
@@ -254,7 +239,10 @@ function trainBatch(inputsCPU, labelsCPU)
    optim.sgd(chunkedFeval, parameters, optimState)
 
    -- DataParallelTable's syncParameters
-   model:apply(function(m) if m.syncParameters then m:syncParameters() end end)
+   if model.needsSync then
+      model:syncParameters()
+   end
+
 
    cutorch.synchronize()
    batchNumber = batchNumber + 1

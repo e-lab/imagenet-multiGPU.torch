@@ -127,7 +127,7 @@ function dataset:__init(...)
    local wc = 'wc'
    local cut = 'cut'
    local find = 'find'
-   if jit.os == 'OSX' then
+   if ffi.os == 'OSX' then
       wc = 'gwc'
       cut = 'gcut'
       find = 'gfind'
@@ -313,7 +313,7 @@ end
 
 -- converts a table of samples (and corresponding labels) to a clean tensor
 local function tableToOutput(self, dataTable, scalarTable)
-   local data, scalarLabels, labels
+   local data, scalarLabels
    local quantity = #scalarTable
    assert(dataTable[1]:dim() == 3)
    data = torch.Tensor(quantity,
