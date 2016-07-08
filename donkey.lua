@@ -186,6 +186,13 @@ elseif not opt.normalize then
    cache.mean = mean
    cache.std = std
    torch.save(meanstdCache, cache)
+elseif opt.lastLayer == 'lastLayerOnly' then
+   local mean = {0.485, 0.456, 0.406}
+   local std  = {0.229, 0.224, 0.225}
+   local cache = {}
+   cache.mean = mean
+   cache.std = std
+   torch.save(meanstdCache, cache)
 else
    local tm = torch.Timer()
    local nSamples = 10000

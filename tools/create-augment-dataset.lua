@@ -13,7 +13,7 @@ Required parameters
 
 (Optional) parameters
    --dim            (default 256)     output image size
-   --ratio          (default 0.1)     training/validation set split ratio [0 0.5]
+   --ratio          (default 0.3)     training/validation set split ratio [0 0.5]
    --inner_crop     (default true)    region of crop (inner or outer square box)
    --offset         (default 0)       offset for image boundary when outer_crop used
    --training_dir   (default 'train') output directory name for training set
