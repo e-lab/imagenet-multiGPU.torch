@@ -64,6 +64,30 @@ if opt.regimes == 'res' then
       end
       return { learningRate = lr , weightDecay= math.floor((epoch - 1) / 30) }, true
    end
+elseif opt.regimes == 'pow' then
+   function paramsForEpoch(epoch)
+      local learningRate
+      if opt.LR ~= 0.0 and epoch == 1 then -- if manually specified
+         learningRate = opt.LR
+         return { }
+      elseif opt.LR == 0.0 and epoch == 1 then
+         learningRate = 1e-2
+      end
+      learningRate = learningRate  *  math.pow( 0.9, epoch - 1)
+      local regimes = {
+         -- start, end,     WD,
+         {  1,     18,   5e-4, },
+         { 19,     29,   5e-4  },
+         { 30,     43,   0 },
+         { 44,     52,   0 },
+         { 53,    1e8,   0 },
+      }
+      for _, row in ipairs(regimes) do
+         if epoch >= row[1] and epoch <= row[2] then
+             return { learningRate = learningRate, weightDecay=row[3] }, true
+         end
+      end
+   end
 else
    function paramsForEpoch(epoch)
        if opt.LR ~= 0.0 then -- if manually specified
