@@ -19,25 +19,30 @@ require 'optim'
 
 -- 1. Create Network
 -- 1.1 If preloading option is set, preload weights from existing models appropriately
-if opt.retrain ~= 'none' and not opt.lastLayer == 'res34' and not opt.lastLayer == 'fine' then
-   assert(paths.filep(opt.retrain), 'File not found: ' .. opt.retrain)
-   print('Loading model from file: ' .. opt.retrain);
-   model = loadDataParallel(opt.retrain, opt.nGPU) -- defined in util.lua
-elseif opt.retrain ~= 'none' and opt.lastLayer == 'fine' or opt.lastLayer == 'lastLayerOnly'then
-   assert(paths.filep(opt.retrain), 'File not found: ' .. opt.retrain)
-   print('Loading model from file: ' .. opt.retrain);
-   print('Last Layer Only')
-   model, last = loadDataParallelLastLayerOnly(opt.retrain, opt.nGPU) -- defined in util.lua
-else
-   paths.dofile('models/' .. opt.netType .. '.lua')
-   print('=> Creating model from file: models/' .. opt.netType .. '.lua')
-   model = createModel(opt.nGPU) -- for the model creation code, check the models/ folder
+function conCudnn(model,opt)
    if opt.backend == 'cudnn' then
       require 'cudnn'
       cudnn.convert(model, cudnn)
    elseif opt.backend ~= 'nn' then
       error'Unsupported backend'
    end
+end
+if opt.retrain ~= 'none' and not opt.lastLayer == 'res34' and not opt.lastLayer == 'fine' then
+   assert(paths.filep(opt.retrain), 'File not found: ' .. opt.retrain)
+   print('Loading model from file: ' .. opt.retrain);
+   model = loadDataParallel(opt.retrain, opt.nGPU) -- defined in util.lua
+   conCudnn(model,opt)
+elseif opt.retrain ~= 'none' and opt.lastLayer == 'fine' or opt.lastLayer == 'lastLayerOnly'then
+   assert(paths.filep(opt.retrain), 'File not found: ' .. opt.retrain)
+   print('Loading model from file: ' .. opt.retrain);
+   print('Last Layer Only')
+   model, last = loadDataParallelLastLayerOnly(opt.retrain, opt.nGPU) -- defined in util.lua
+   conCudnn(model,opt)
+else
+   paths.dofile('models/' .. opt.netType .. '.lua')
+   print('=> Creating model from file: models/' .. opt.netType .. '.lua')
+   model = createModel(opt.nGPU) -- for the model creation code, check the models/ folder
+   conCudnn(model,opt)
 end
 
 -- 2. Create Criterion
