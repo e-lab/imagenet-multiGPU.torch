@@ -48,24 +48,42 @@ end
 -- Return values:
 --    diff to apply to optimState,
 --    true IFF this is the first epoch of a new regime
-local function paramsForEpoch(epoch)
-    if opt.LR ~= 0.0 then -- if manually specified
-        return { }
-    end
-    local regimes = {
-        -- start, end,    LR,   WD,
-        {  1,     18,   1e-2,   5e-4, },
-        { 19,     29,   5e-3,   5e-4  },
-        { 30,     43,   1e-3,   0 },
-        { 44,     52,   5e-4,   0 },
-        { 53,    1e8,   1e-4,   0 },
-    }
+local paramsForEpoch
+if opt.regimes == 'res' then
+   function paramsForEpoch(epoch)
+      local decay = 0, lr
+      if epoch == 1 then
+         if opt.LR ~= 0 then
+            lr =  opt.LR
+         else
+            lr = 0.1
+         end
+      else
+         decay = math.floor((epoch - 1) / 30)
+         lr= lr * math.pow(0.1,decay)
+      end
+      return { learningRate = lr , weightDecay= math.floor((epoch - 1) / 30) }, true
+   end
+else
+   function paramsForEpoch(epoch)
+       if opt.LR ~= 0.0 then -- if manually specified
+           return { }
+       end
+       local regimes = {
+           -- start, end,    LR,   WD,
+           {  1,     18,   1e-2,   5e-4, },
+           { 19,     29,   5e-3,   5e-4  },
+           { 30,     43,   1e-3,   0 },
+           { 44,     52,   5e-4,   0 },
+           { 53,    1e8,   1e-4,   0 },
+       }
 
-    for _, row in ipairs(regimes) do
-        if epoch >= row[1] and epoch <= row[2] then
-            return { learningRate=row[3], weightDecay=row[4] }, epoch == row[1]
-        end
-    end
+       for _, row in ipairs(regimes) do
+           if epoch >= row[1] and epoch <= row[2] then
+               return { learningRate=row[3], weightDecay=row[4] }, epoch == row[1]
+           end
+       end
+   end
 end
 
 -- 2. Create loggers.
@@ -236,7 +254,13 @@ function trainBatch(inputsCPU, labelsCPU)
    end
 
    model:zeroGradParameters()
-   optim.sgd(chunkedFeval, parameters, optimState)
+   if opt.optimizer == 'sgd' then
+      optim.sgd(chunkedFeval, parameters, optimState)
+   elseif opt.optimizer == 'adam' then
+      optim.adam(chunkedFeval, parameters, optimState)
+   else
+      error('Wrong opt.optimizer should be sgd or adam')
+   end
 
    -- DataParallelTable's syncParameters
    if model.needsSync then

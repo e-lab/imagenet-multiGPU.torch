@@ -6,7 +6,7 @@ function makeDataParallel(model, nGPU)
       print('converting module to nn.DataParallelTable')
       assert(nGPU <= cutorch.getDeviceCount(), 'number of GPUs less than nGPU specified')
       local model_single = model
-      model = nn.DataParallelTable(1)
+      model = nn.DataParallelTable(1,true,true)
       for i=1, nGPU do
          cutorch.setDevice(i)
          model:add(model_single:clone():cuda(), i)
@@ -21,7 +21,7 @@ local function cleanDPT(module)
    -- This assumes this DPT was created by the function above: all the
    -- module.modules are clones of the same network on different GPUs
    -- hence we only need to keep one when saving the model to the disk.
-   local newDPT = nn.DataParallelTable(1)
+   local newDPT = nn.DataParallelTable(1,true,true)
    cutorch.setDevice(opt.GPU)
    newDPT:add(module:get(1), opt.GPU)
    return newDPT
