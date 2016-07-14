@@ -87,6 +87,7 @@ function dataset:__init(...)
    if not self.loadSize then self.loadSize = self.sampleSize; end
 
    if not self.sampleHookTrain then self.sampleHookTrain = self.defaultSampleHook end
+   if not self.colorHookTrain then self.colorHookTrain = self.defaultSampleHook end
    if not self.sampleHookTest then self.sampleHookTest = self.defaultSampleHook end
 
    -- find class names
@@ -301,6 +302,7 @@ function dataset:size(class, list)
 end
 
 -- getByClass
+local check = false
 function dataset:getByClass(class)
    local index = math.max(1, math.ceil(torch.uniform() * self.classListSample[class]:nElement()))
    local sample = self.classListSample[class][index]
@@ -308,7 +310,16 @@ function dataset:getByClass(class)
        error(string.format('There is no path for sample %d = %d index in class %d! (There are only %d paths)', sample, index, class, self.imagePath:size(1)))
    end
    local imgpath = ffi.string(torch.data(self.imagePath[sample]))
-   return self:sampleHookTrain(imgpath)
+
+   if not opt.color or check then
+      check = false
+      --print('normal Hook Running')
+      return self:sampleHookTrain(imgpath)
+   else
+      check = true
+      --print('color Hook Running')
+      return self:colorHookTrain(imgpath)
+   end
 end
 
 -- converts a table of samples (and corresponding labels) to a clean tensor
@@ -336,6 +347,8 @@ function dataset:sample(quantity, min)
    for i=1,quantity do
       class = ((i-1)%min == 0) and torch.random(1, #self.classes) or class
       local out = self:getByClass(class)
+      --print('------dataset-----')
+      --print(out[1]:mean())
       table.insert(dataTable, out)
       table.insert(scalarTable, class)
    end

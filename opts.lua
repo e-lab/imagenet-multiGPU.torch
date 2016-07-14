@@ -48,6 +48,7 @@ function M.parse(arg)
     cmd:option('-optimState',  'none', 'provide path to an optimState to reload from')
     cmd:option('-rngState',    'none', 'provide path to RNG state to reload from')
     cmd:option('-lastLayer',   'none', 'provide option to fine tune or train on last layer only | fine | lastLayerOnly')
+    cmd:option('-color',        true,  'Option for color image augmentation')
     cmd:text()
 
     local opt = cmd:parse(arg or {})

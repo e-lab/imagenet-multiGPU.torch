@@ -72,6 +72,11 @@ local mean,std
 --]]
 
 -- function to load the image, jitter it appropriately (random crops etc.)
+function ColorJitter(r, g, b, img)
+   img[1]:add(r)
+   img[2]:add(g)
+   img[3]:add(b)
+end
 local trainHook = function(self, path)
    collectgarbage()
    local input = loadImage(path)
@@ -95,11 +100,39 @@ local trainHook = function(self, path)
    end
    return out
 end
+local colorTrainHook = function(self, path)
+   collectgarbage()
+   local input = loadImage(path)
+   local iW = input:size(3)
+   local iH = input:size(2)
+
+   -- do random crop
+   local oW = sampleSize[3]
+   local oH = sampleSize[2]
+   local h1 = math.ceil(torch.uniform(1e-2, iH-oH))
+   local w1 = math.ceil(torch.uniform(1e-2, iW-oW))
+   local out = image.crop(input, w1, h1, w1 + oW, h1 + oH)
+   assert(out:size(3) == oW)
+   assert(out:size(2) == oH)
+   -- do hflip with probability 0.5
+   if torch.uniform() > 0.5 then out = image.hflip(out) end
+   -- mean/std
+   for i=1,3 do -- channels
+      if mean then out[{{i},{},{}}]:add(-mean[i]) end
+      if std then out[{{i},{},{}}]:div(std[i]) end
+   end
+   --Add color
+   --print('-------before------')
+   --print(out[1]:mean())
+   ColorJitter(0.1,0.1,0.1,out)
+   return out
+end
 
 if paths.filep(trainCache) then
    print('Loading train metadata from cache')
    trainLoader = torch.load(trainCache)
    trainLoader.sampleHookTrain = trainHook
+   trainLoader.colorHookTrain = colorTrainHook
    assert(trainLoader.paths[1] == paths.concat(opt.data, 'train'),
           'cached files dont have the same path as opt.data. Remove your cached files at: '
              .. trainCache .. ' and rerun the program')
@@ -114,6 +147,7 @@ else
    }
    torch.save(trainCache, trainLoader)
    trainLoader.sampleHookTrain = trainHook
+   trainLoader.colorHookTrain = colorTrainHook
 end
 collectgarbage()
 
