@@ -48,7 +48,7 @@ end
 -- Return values:
 --    diff to apply to optimState,
 --    true IFF this is the first epoch of a new regime
-local paramsForEpoch
+local paramsForEpoch, learningRate
 if opt.regimes == 'res' then
    function paramsForEpoch(epoch)
       local decay = 0, lr
@@ -66,12 +66,13 @@ if opt.regimes == 'res' then
    end
 elseif opt.regimes == 'pow' then
    function paramsForEpoch(epoch)
-      local learningRate
       if opt.LR ~= 0.0 and epoch == 1 then -- if manually specified
          learningRate = opt.LR
          return { }
       elseif opt.LR == 0.0 and epoch == 1 then
          learningRate = 1e-2
+      elseif epoch > 8 then
+         learningRate = learningRate
       end
       learningRate = learningRate  *  math.pow( 0.9, epoch - 1)
       local regimes = {

@@ -54,7 +54,7 @@ function loadDataParallel(filename, nGPU)
       return makeDataParallel(model:get(1):float(), nGPU)
    elseif torch.type(model) == 'nn.Sequential' then
       for i,module in ipairs(model.modules) do
-         if torch.type(module) == 'nn.DataParallelTable' then
+         if torch.type(module) == 'nn.Sequential' then
             model.modules[i] = makeDataParallel(module:get(1):float(), nGPU)
          end
       end
@@ -64,17 +64,22 @@ function loadDataParallel(filename, nGPU)
    end
 end
 function loadDataParallelLastLayerOnly(filename, nGPU)
+   if opt.backend == 'cudnn' then
+      require 'cudnn'
+   end
    local model = torch.load(filename)
+   --Add Last Layer
    local nlayers = #model
    local featuressize = model.modules[nlayers].weight:size(2)
-   model.modules[nlayers] = nil  -- deleting nn.Linear layer
+   --model.modules[nlayers] = nil  -- deleting nn.Linear layer
+   model:remove(nlayers)  -- deleting nn.Linear layer
    local linear = nn.Linear(featuressize, nClasses)
    model:add(linear:cuda()):add(nn.LogSoftMax():cuda())
    if torch.type(model) == 'nn.DataParallelTable' then
       return makeDataParallel(model:get(1):float(), nGPU)
    elseif torch.type(model) == 'nn.Sequential' then
       for i,module in ipairs(model.modules) do
-         if torch.type(module) == 'nn.DataParallelTable' then
+         if torch.type(module) == 'nn.Sequential' then
             model.modules[i] = makeDataParallel(module:get(1):float(), nGPU)
          end
       end
