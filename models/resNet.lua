@@ -19,7 +19,7 @@ local Max = nn.SpatialMaxPooling
 local SBatchNorm = nn.SpatialBatchNormalization
 
 function createModel(nGPU)
-   local depth = 34
+   local depth = opt.depth
    local shortcutType =  'B'
    local iChannels
 
@@ -129,7 +129,7 @@ function createModel(nGPU)
 
    local classifier = nn.Sequential()
    classifier:add(nn.View(nFeatures):setNumInputDims(3))
-   classifier:add(nn.Linear(nFeatures, 1000))
+   classifier:add(nn.Linear(nFeatures, nClasses))
    classifier:add(nn.LogSoftMax())
 
    classifier:cuda()
