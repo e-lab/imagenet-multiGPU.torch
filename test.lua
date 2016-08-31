@@ -9,7 +9,7 @@
 testLogger = optim.Logger(paths.concat(opt.save, 'test.log'))
 
 local batchNumber
-local top1_center, loss
+local top1_center, top5_center, loss
 local testConf = opt.conf and optim.ConfusionMatrix(classes) or nil
 local testBatchSize = math.floor(opt.batchSize / opt.batchChunks)
 local timer = torch.Timer()
@@ -26,6 +26,7 @@ function test()
    model:evaluate()
 
    top1_center = 0
+   top5_center = 0
    loss = 0
    if testConf then testConf:zero() end
    for i=1,nTest/testBatchSize do -- nTest is set in 1_data.lua
@@ -46,15 +47,17 @@ function test()
    cutorch.synchronize()
 
    top1_center = top1_center * 100 / nTest
+   top5_center = top5_center * 100 / nTest
    loss = loss / (nTest/testBatchSize) -- because loss is calculated per batch
    testLogger:add{
       ['% top1 accuracy (test set) (center crop)'] = top1_center,
+      ['% top5 accuracy (test set) (center crop)'] = top5_center,
       ['avg loss (test set)'] = loss
    }
    print(string.format('Epoch: [%d][TESTING SUMMARY] Total Time(s): %.2f \t'
                           .. 'average loss (per batch): %.2f \t '
-                          .. 'accuracy [Center](%%):\t top-1 %.2f\t ',
-                       epoch, timer:time().real, loss, top1_center))
+                          .. 'accuracy [Center](%%):\t top-1 %.2f\t top-5 %.2f\t',
+                       epoch, timer:time().real, loss, top1_center, top5_center))
 
    if opt.conf then
       io.write('==> Saving training confusion matrix...'); io.flush()
@@ -99,6 +102,16 @@ function testBatch(inputsCPU, labelsCPU)
       local g = labelsCPU[i]
       if pred_sorted[i][1] == g then top1_center = top1_center + 1 end
    end
+   --Top5 & Top1 error
+   local correct = pred_sorted:eq(
+      labelsCPU:long():view(pred:size(1),1):expandAs(pred:long()))
+   local len = math.min(5, correct:size(2))
+   local sumCorrect  = correct:narrow(2, 1, len):sum()
+   -- Check if it's correct and add
+   if sumCorrect > 0 then
+      top5_center = top5_center + sumCorrect
+   end
+
    if batchNumber % (testBatchSize * print_every) == 0 then
       print(('Epoch: Testing [%d][%d/%d]'):format(epoch, batchNumber, nTest))
    end

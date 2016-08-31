@@ -73,8 +73,9 @@ elseif opt.regimes == 'pow' then
          learningRate = 1e-2
       elseif epoch > 8 then
          learningRate = learningRate
-      end
+      else
       learningRate = learningRate  *  math.pow( 0.9, epoch - 1)
+      end
       local regimes = {
          -- start, end,     WD,
          {  1,     18,   5e-4, },
@@ -114,7 +115,7 @@ end
 -- 2. Create loggers.
 trainLogger = optim.Logger(paths.concat(opt.save, 'train.log'))
 local batchNumber
-local top1_epoch, loss_epoch
+local top1_epoch, top5_epoch, loss_epoch
 trainConf = opt.conf and optim.ConfusionMatrix(classes) or nil
 
 -- 3. train - this function handles the high-level training loop,
@@ -141,6 +142,7 @@ function train()
 
    local tm = torch.Timer()
    top1_epoch = 0
+   top5_epoch = 0
    loss_epoch = 0
    if trainConf then trainConf:zero() end
    for i=1,opt.epochSize do
@@ -170,16 +172,18 @@ function train()
    cutorch.synchronize()
 
    top1_epoch = top1_epoch * 100 / (opt.batchSize * opt.epochSize)
+   top5_epoch = top5_epoch * 100 / (opt.batchSize * opt.epochSize)
    loss_epoch = loss_epoch / opt.epochSize
 
    trainLogger:add{
       ['% top1 accuracy (train set)'] = top1_epoch,
+      ['% top5 accuracy (train set)'] = top5_epoch,
       ['avg loss (train set)'] = loss_epoch
    }
    print(string.format('Epoch: [%d][TRAINING SUMMARY] Total Time(s): %.2f\t'
                           .. 'average loss (per batch): %.2f \t '
-                          .. 'accuracy(%%):\t top-1 %.2f\t',
-                       epoch, tm:time().real, loss_epoch, top1_epoch))
+                          .. 'accuracy(%%):\t top-1 %.2f\t top-5 %.2f',
+                       epoch, tm:time().real, loss_epoch, top1_epoch, top5_epoch))
    print('\n')
 
    -- save model
@@ -308,9 +312,21 @@ function trainBatch(inputsCPU, labelsCPU)
       end
       top1 = top1 * 100 / opt.batchSize;
    end
-
-   print(('Epoch: [%d][%d/%d]\tTime %.3f Err %.4f Top1-%%: %.2f LR %.0e DataLoadingTime %.3f'):format(
-          epoch, batchNumber, opt.epochSize, timer:time().real, totalerr, top1,
+   local top5 = 0
+   do
+      local _, predictions = outputsCPU:float():sort(2,true)
+      local correct = predictions:eq(
+         labelsCPU:long():view(opt.batchSize, 1):expandAs(outputsCPU:long()))
+      local len = math.min(5, correct:size(1))
+      local sumCorrect = correct:narrow(2, 1, len):sum()
+      if sumCorrect > 0 then
+         top5_epoch = top5_epoch + 1
+         top5 = top5 + sumCorrect
+      end
+      top5 = top5 * 100 / opt.batchSize;
+   end
+   print(('Epoch: [%d][%d/%d]\tTime %.3f Err %.4f Top1-%%: %.2f Top5-%%: %.2f LR %.0e DataLoadingTime %.3f'):format(
+          epoch, batchNumber, opt.epochSize, timer:time().real, totalerr, top1, top5,
           optimState.learningRate, dataLoadingTime))
 
    if model.auxClassifiers and model.auxClassifiers > 0 then
