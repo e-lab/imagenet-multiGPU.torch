@@ -30,12 +30,15 @@ end
 if opt.retrain ~= 'none' and not opt.lastLayer == 'res34' and not opt.lastLayer == 'fine' then
    assert(paths.filep(opt.retrain), 'File not found: ' .. opt.retrain)
    print('Loading model from file: ' .. opt.retrain);
+   print('Retraining')
    model = loadDataParallel(opt.retrain, opt.nGPU) -- defined in util.lua
    conCudnn(model,opt)
 elseif opt.retrain ~= 'none' and opt.lastLayer == 'fine' or opt.lastLayer == 'lastLayerOnly'then
    assert(paths.filep(opt.retrain), 'File not found: ' .. opt.retrain)
    print('Loading model from file: ' .. opt.retrain);
-   print('Last Layer Only')
+   print('Last Layer Onlyi and Finetunning')
+   -- loadDataParallelLastLayerOnly will replacy last layer finetunning and lastLayer is differnt
+   -- in the trainning method loading model is same
    model, last = loadDataParallelLastLayerOnly(opt.retrain, opt.nGPU) -- defined in util.lua
    conCudnn(model,opt)
 else

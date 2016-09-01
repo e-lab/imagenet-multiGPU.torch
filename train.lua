@@ -300,8 +300,9 @@ function trainBatch(inputsCPU, labelsCPU)
    cutorch.synchronize()
    batchNumber = batchNumber + 1
    loss_epoch = loss_epoch + totalerr
-   -- top-1 error
+   -- top-1 and top-5 error
    local top1 = 0
+   local top5 = 0
    do
       local _,max_prediction = outputsCPU:max(2)
       for i=1,opt.batchSize do
@@ -312,7 +313,6 @@ function trainBatch(inputsCPU, labelsCPU)
       end
       top1 = top1 * 100 / opt.batchSize;
    end
-   local top5 = 0
    do
       local _, predictions = outputsCPU:float():sort(2,true)
       local correct = predictions:eq(
@@ -320,7 +320,7 @@ function trainBatch(inputsCPU, labelsCPU)
       local len = math.min(5, correct:size(1))
       local sumCorrect = correct:narrow(2, 1, len):sum()
       if sumCorrect > 0 then
-         top5_epoch = top5_epoch + 1
+         top5_epoch = top5_epoch + sumCorrect
          top5 = top5 + sumCorrect
       end
       top5 = top5 * 100 / opt.batchSize;
