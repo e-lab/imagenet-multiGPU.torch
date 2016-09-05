@@ -69,27 +69,27 @@ function grayscale(img,dst)
       image.save(img_path, img)
    end
 end
-function Saturation(sat, img, dst)
-	img[1]:add(sat)
-	img[2]:add(sat)
-	img[3]:add(sat)
-	local img_path = string.sub(dst,1,-5) .. "sat" .. sat .. ".png"
+function Brightness(br, img, dst)
+   local alpha = torch.uniform(-br,br)
+	img[1]:add(alpha)
+	img[2]:add(alpha)
+	img[3]:add(alpha)
+	local img_path = string.sub(dst,1,-5) .. "br" .. alpha .. ".png"
 	image.save(img_path, img)
 end
 function Contrast(con,img,dst)
    gs = img:clone()
    grayscale(gs)
    gs:fill(gs[1]:mean())
-   con = 0.7
 	local alpha = 1.0 + torch.uniform(-con, con)
 	sample = blend(img, gs, alpha)
-	local img_path = string.sub(dst,1,-5) .. "cont" .. con .. ".png"
+	local img_path = string.sub(dst,1,-5) .. "cont" .. alpha .. ".png"
 	image.save(img_path, sample)
 end
 function ColorJitter(r, g, b, img, dst)
 	img[1]:add(r)
 	img[2]:add(g)
 	img[3]:add(b)
-	local img_path = string.sub(dst,1,-5) .. "color".. ".png"
+	local img_path = string.sub(dst,1,-5) .. "colorRGB".. tostring(r)..tostring(g)..tostring(b)..".png"
 	image.save(img_path, img)
 end

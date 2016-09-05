@@ -13,24 +13,23 @@ Required parameters
 
 (Optional) parameters
    --dim            (default 256)     output image size
-   --ratio          (default 0.3)     training/validation set split ratio [0 0.5]
+   --ratio          (default 0.2)     training/validation set split ratio [0 0.5]
    --inner_crop     (default true)    region of crop (inner or outer square box)
    --offset         (default 0)       offset for image boundary when outer_crop used
    --training_dir   (default 'train') output directory name for training set
    --validation_dir (default 'val')   output directory name for validation set
 
 (Augment option)
-   --degree      (default 0.4)    Amount of rotation gradians
+   --degree      (default 0.1)    Amount of rotation gradians
    --num_rotate  (default 2  )    number of rotation from degree
    --max_trans   (default 60 )    Max amunt of translation
    --transImgInt (default 30 )    Amount of translation from max_trans
    --flip        (default true)   Flip images
-   --r      (default 0.4)    Amount of rotation gradians
-   --g      (default 0.4)    Amount of rotation gradians
-   --b      (default 0.4)    Amount of rotation gradians
-   --sat    (default 0.3)    Amount of saturation
-   --bri    (default 0.3)    Amount of brightness
-   --con    (default 0.3)    Amount of contrast
+   --r      (default 0.3)    Amount of rotation gradians
+   --g      (default 0.3)    Amount of rotation gradians
+   --b      (default 0.3)    Amount of rotation gradians
+   --br     (default 0.4)   Amount of brightness
+   --con    (default 0.4)    Amount of contrast
    --gray   (default false)  Augment gray scale
 ]])
 
@@ -68,15 +67,23 @@ local function resize_image(dst, src, dim, inner_crop, offset)
    x = ((x:size(1) > 3) and x[{{1,3},{},{}}]) or x
 
 
-   -- calculate coordinate for crop (left top of box)
-   local lbox = math.floor(math.abs(x:size(3) - dim)/2 + 1)
-   local tbox = math.floor(math.abs(x:size(2) - dim)/2 + 1)
+
 
    -- copy paste to y depending on crop_mode
    local y
    if inner_crop then
-      y = x[{{},{tbox,tbox+dim-1},{lbox,lbox+dim-1}}]
+      local cs
+      if x:size(3) > x:size(3) then
+         cs = x:size(3)
+      else
+         cs = x:size(2)
+      end
+      x = image.crop(x,'c',cs,cs)
+      y = image.scale(x,dim,dim)
    elseif outer_crop then
+      -- calculate coordinate for crop (left top of box)
+      local lbox = math.floor(math.abs(x:size(3) - dim)/2 + 1)
+      local tbox = math.floor(math.abs(x:size(2) - dim)/2 + 1)
       y = torch.Tensor():typeAs(x):resize(3, dim, dim):fill(offset)
       y[{{},{tbox,tbox+x:size(2)-1},{lbox,lbox+x:size(3)-1}}]:copy(x)
    end
@@ -137,15 +144,20 @@ local function augment_image(dst, src, dim, inner_crop, offset)
       crop5_img(flip, dst, y, opt.max_trans, transImgInt)
    end
    -- color augmentation
-   if opt.r > 0 or opt.b >0 or opt.b > 0 then
-      print 'color'
-      ColorJitter(r,g,b,y,dst)
+   if opt.r ~=  0 then
+      ColorJitter(opt.r, 0 , 0,y,dst)
    end
-   if opt.sat > 0 then
-      Saturation(sat, y, dst)
+   if opt.g ~= 0 then
+      ColorJitter(0,opt.g,0,y,dst)
    end
-   if opt.con > 0 then
-      Contrast(con, y, dst)
+   if opt.b ~= 0 then
+      ColorJitter(0,0,opt.b,y,dst)
+   end
+   if opt.br ~= 0 then
+      Brightness(opt.br, y, dst)
+   end
+   if opt.con ~= 0 then
+      Contrast(opt.con, y, dst)
    end
    if opt.gray then
       grayscale(y,dst)

@@ -74,7 +74,7 @@ elseif opt.regimes == 'pow' then
       elseif epoch > 8 then
          learningRate = learningRate
       else
-      learningRate = learningRate  *  math.pow( 0.9, epoch - 1)
+         learningRate = learningRate  *  math.pow( 0.9, epoch - 1)
       end
       local regimes = {
          -- start, end,     WD,
