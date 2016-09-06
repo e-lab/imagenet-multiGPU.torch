@@ -71,7 +71,7 @@ elseif opt.regimes == 'pow' then
          return { }
       elseif opt.LR == 0.0 and epoch == 1 then
          learningRate = 1e-2
-      elseif epoch > 8 then
+      elseif epoch > 15 then
          learningRate = learningRate
       else
          learningRate = learningRate  *  math.pow( 0.9, epoch - 1)
