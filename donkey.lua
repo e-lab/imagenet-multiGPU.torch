@@ -221,9 +221,14 @@ elseif not opt.normalize then
    cache.std = std
    torch.save(meanstdCache, cache)
 elseif opt.lastLayer == 'lastLayerOnly' or 'fine' then
-   local mean = {0.485, 0.456, 0.406}
-   local std  = {0.229, 0.224, 0.225}
+   mean = {0.485, 0.456, 0.406}
+   std  = {0.229, 0.224, 0.225}
    local cache = {}
+   print('For imagenet pretrained version')
+   print('MEAN:')
+   print(mean)
+   print('STD')
+   print(std)
    cache.mean = mean
    cache.std = std
    torch.save(meanstdCache, cache)
