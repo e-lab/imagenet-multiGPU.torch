@@ -14,11 +14,11 @@ function createModel(nGPU)
    features:add(nn.SpatialConvolution(3,64,7,7,3,3))       -- 224 -> 73
    features:add(nn.SpatialBatchNormalization(64,1e-3))
    features:add(nn.ReLU(true))
-   features:add(nn.SpatialMaxPooling(2,2,2,2))                   -- 73 ->  36
+   features:add(nn.SpatialMaxPooling(2,2,2,2):ceil())                   -- 73 ->  36
    features:add(nn.SpatialConvolution(64,192,5,5,2,2))       --  36 -> 14
    features:add(nn.SpatialBatchNormalization(192,1e-3))
    features:add(nn.ReLU(true))
-   features:add(nn.SpatialMaxPooling(2,2,2,2))                   --  14 ->  7
+   features:add(nn.SpatialMaxPooling(2,2,2,2):ceil())                   --  14 ->  7
    features:add(nn.SpatialConvolution(192,384,3,3,1,1,1,1))      --  7 ->  7
    features:add(nn.SpatialBatchNormalization(384,1e-3))
    features:add(nn.ReLU(true))
