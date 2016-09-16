@@ -171,7 +171,6 @@ function createModel(nGPU)
             if m.setMode then m:setMode(1,1,1) end
          end)
       end
-      model:get(i).gradInput = nil
    end
    print('=============================================================')
    print(model:get(1))

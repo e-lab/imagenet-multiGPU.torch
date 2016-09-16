@@ -206,6 +206,8 @@ local dataTimer = torch.Timer()
 local parameters, gradParameters
 -- Get only lastlayer parameters if want to train lastLayer only
 if opt.lastLayer == 'lastLayerOnly' then
+   print('LastLayerDefinition check:')
+   print(model.modules[#model.modules-1])
    parameters, gradParameters = model.modules[#model.modules-1]:getParameters()
    print(parameters:size())
 else
