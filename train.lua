@@ -92,6 +92,7 @@ elseif opt.regimes == 'pow' then
    end
 else
    function paramsForEpoch(epoch)
+       print('Original ImageNet Regimes')
        if opt.LR ~= 0.0 then -- if manually specified
            return { }
        end

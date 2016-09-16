@@ -12,7 +12,7 @@ Required parameters
 
 (Optional) parameters
    --dim            (default 256)     output image size
-   --ratio          (default 0.1)     training/validation set split ratio [0 0.5]
+   --ratio          (default 0.3)     training/validation set split ratio [0 0.5]
    --inner_crop     (default true)    region of crop (inner or outer square box)
    --offset         (default 0)       offset for image boundary when outer_crop used
    --training_dir   (default 'train') output directory name for training set
@@ -119,7 +119,6 @@ local function create_dataset(arg)
 
    -- arguments for train/val set split (name and ratio)
    local ratio = math.min(math.max(arg.ratio, 0), 0.5) or 0
-   local ratio = 1/11
    local training_dir   = arg.training_dir or 'train'
    local validation_dir = arg.validation_dir or 'val'
 
