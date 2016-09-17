@@ -90,6 +90,14 @@ elseif opt.regimes == 'pow' then
          end
       end
    end
+elseif opt.regimes == 'adam' then
+   function paramsForEpoch(epoch)
+      if opt.LR ~= 0.0 then -- if manually specified
+          return { }
+      else
+         return {learningRate = 1e-3, weightDecay = opt.weightDecay}, true
+      end
+   end
 else
    function paramsForEpoch(epoch)
        print('Original ImageNet Regimes')
