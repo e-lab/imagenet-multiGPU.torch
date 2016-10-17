@@ -27,7 +27,8 @@ function conCudnn(model,opt)
       error'Unsupported backend'
    end
 end
-if opt.retrain ~= 'none' and not opt.lastLayer == 'lastLayerOnly' and not opt.lastLayer == 'fine' then
+if opt.retrain ~= 'none' and opt.lastLayer == 'retrain'  then
+   print('RETRAIN')
    assert(paths.filep(opt.retrain), 'File not found: ' .. opt.retrain)
    print('Loading model from file: ' .. opt.retrain);
    print('Retraining')
