@@ -197,14 +197,28 @@ local function squash_model(x, state)
                else
                   assert(false, 'Convolution module must exist right before batch normalization layer')
                end
-
-            elseif x.modules[i].__typename == 'nn.BatchNormalization' then
+            elseif x.modules[i].__typename == 'nn.BatchNormalization' and x.modules[i].running_std then
                if x.modules[i-1] and
                  (x.modules[i-1].__typename == 'nn.Linear') then
                   absorb_bn_conv(x.modules[i-1].weight,
                                  x.modules[i-1].bias,
                                  x.modules[i].running_mean,
                                  x.modules[i].running_std,
+                                 x.modules[i].affine,
+                                 x.modules[i].weight,
+                                 x.modules[i].bias)
+                  x:remove(i)
+                  i = i - 1
+               else
+                  assert(false, 'Convolution module must exist right before batch normalization layer')
+               end
+            elseif x.modules[i].__typename == 'nn.BatchNormalization' and not x.modules[i].running_std then
+               if x.modules[i-1] and
+                 (x.modules[i-1].__typename == 'nn.Linear') then
+                  absorb_bn_conv(x.modules[i-1].weight,
+                                 x.modules[i-1].bias,
+                                 x.modules[i].running_mean,
+                                 x.modules[i].running_var:clone():sqrt():add(x.modules[i].eps):pow(-1),
                                  x.modules[i].affine,
                                  x.modules[i].weight,
                                  x.modules[i].bias)
