@@ -230,7 +230,7 @@ function trainBatch(inputsCPU, labelsCPU)
    end
 
    model:zeroGradParameters()
-   optim.sgd(chunkedFeval, parameters, optimState)
+   optim.adam(chunkedFeval, parameters, optimState)
 
    -- DataParallelTable's syncParameters
    if model.needsSync then
