@@ -93,7 +93,7 @@ function createModel(nGPU)
    --classifier
    local classifier = nn.Sequential()
    classifier:add(nn.View(1024))
-   classifier:add(nn.Linear(1024, 1000))
+   classifier:add(nn.Linear(1024, nClasses))
    classifier:add(nn.LogSoftMax())
    classifier:cuda()
 
