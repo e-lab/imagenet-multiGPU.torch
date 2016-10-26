@@ -158,6 +158,14 @@ local function squash_model(x, state)
             end
          end
 
+         local absorb_bn_convnobias = function (w, mean, invstd, affine, gamma, beta)
+            w:cmul(invstd:view(w:size(1),1):repeatTensor(1,w:nElement()/w:size(1)))
+
+            if affine then
+               w:cmul(gamma:view(w:size(1),1):repeatTensor(1,w:nElement()/w:size(1)))
+            end
+         end
+
          local absorb_bn_deconv = function (w, b, mean, invstd, affine, gamma, beta)
             w:cmul(invstd:view(b:size(1),1):repeatTensor(w:size(1),w:nElement()/w:size(1)/b:nElement()))
             b:add(-mean):cmul(invstd)
@@ -170,12 +178,25 @@ local function squash_model(x, state)
 
          -- remove batch normalization
          if state.batchnorm then
-            if x.modules[i].__typename == 'nn.SpatialBatchNormalization' then
+            if x.modules[i].__typename == 'nn.SpatialBatchNormalization'  then
                if x.modules[i-1] and
+                  x.modules[i-1].bias and
                  (x.modules[i-1].__typename == 'nn.SpatialConvolution' or
                   x.modules[i-1].__typename == 'nn.SpatialConvolutionMM') then
                   absorb_bn_conv(x.modules[i-1].weight,
                                  x.modules[i-1].bias,
+                                 x.modules[i].running_mean,
+                                 x.modules[i].running_var:clone():sqrt():add(x.modules[i].eps):pow(-1),
+                                 x.modules[i].affine,
+                                 x.modules[i].weight,
+                                 x.modules[i].bias)
+                  x:remove(i)
+                  i = i - 1
+               elseif x.modules[i-1] and
+                  not x.modules[i-1].bias and
+                 (x.modules[i-1].__typename == 'nn.SpatialConvolution' or
+                  x.modules[i-1].__typename == 'nn.SpatialConvolutionMM') then
+                  absorb_bn_convnobias(x.modules[i-1].weight,
                                  x.modules[i].running_mean,
                                  x.modules[i].running_var:clone():sqrt():add(x.modules[i].eps):pow(-1),
                                  x.modules[i].affine,
