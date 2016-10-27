@@ -69,10 +69,15 @@ function loadDataParallelLastLayerOnly(filename, nGPU)
    end
    local model = torch.load(filename)
    --Add Last Layer
-   local nlayers = #model
-   local featuressize = model.modules[nlayers].weight:size(2)
+   local featuressize
+   if model.modules[#model].__typename == 'nn.Linear' then
+      featuressize = model.modules[#model].weight:size(2)
+   else
+      model:remove(#model)
+      featuressize = model.modules[#model].weight:size(2)
+   end
    --model.modules[nlayers] = nil  -- deleting nn.Linear layer
-   model:remove(nlayers)  -- deleting nn.Linear layer
+   model:remove(#model)  -- deleting nn.Linear layer
    local linear = nn.Linear(featuressize, nClasses)
    model:add(linear:cuda()):add(nn.LogSoftMax():cuda())
    if torch.type(model) == 'nn.DataParallelTable' then
