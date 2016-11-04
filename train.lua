@@ -214,13 +214,17 @@ local timer = torch.Timer()
 local dataTimer = torch.Timer()
 local parameters, gradParameters
 -- Get only lastlayer parameters if want to train lastLayer only
-if opt.lastLayer == 'lastLayerOnly' then
+if opt.lastLayer then
    print('LastLayerDefinition check:')
-   print(model.modules[#model.modules-1])
-   parameters, gradParameters = model.modules[#model.modules-1]:getParameters()
-   print(parameters:size())
+   model = model:get(1)
+   print(model.modules[#model-1])
+   parameters, gradParameters = model.modules[#model-1]:getParameters()
+   print('Update last layer only')
+   print('Numer or parameters:',parameters:size())
+   model = makeDataParallel(model, opt.nGPU)
 else
    parameters, gradParameters = model:getParameters()
+   print('Numer or parameters:',parameters:size())
 end
 
 -- 4. trainBatch - Used by train() to train a single batch after the data is loaded.

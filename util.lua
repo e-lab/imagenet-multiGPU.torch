@@ -1,13 +1,13 @@
 require 'cunn'
 local ffi=require 'ffi'
 
-function makeDataParallel(model, nGPU)
-   if nGPU > 1 then
+function makeDataParallel(model)
+   if opt.nGPU > 1 then
       print('converting module to nn.DataParallelTable')
-      assert(nGPU <= cutorch.getDeviceCount(), 'number of GPUs less than nGPU specified')
+      assert(opt.nGPU <= cutorch.getDeviceCount(), 'number of GPUs less than nGPU specified')
       local model_single = model
       model = nn.DataParallelTable(1,true,true)
-      for i=1, nGPU do
+      for i=1, opt.nGPU do
          cutorch.setDevice(i)
          model:add(model_single:clone():cuda(), i)
       end
@@ -16,6 +16,7 @@ function makeDataParallel(model, nGPU)
 
    return model
 end
+
 
 local function cleanDPT(module)
    -- This assumes this DPT was created by the function above: all the
@@ -49,45 +50,38 @@ function loadDataParallel(filename, nGPU)
    if opt.backend == 'cudnn' then
       require 'cudnn'
    end
+	function replaceLastlayer(model)
+		--Add Last Layer
+		local featuressize
+		if model.modules[#model].__typename == 'nn.Linear' then
+			featuressize = model.modules[#model].weight:size(2)
+		else
+			--If last layer is not linear then it should be Logistic Function
+			model:remove(#model)
+			featuressize = model.modules[#model].weight:size(2)
+		end
+		--model.modules[nlayers] = nil  -- deleting nn.Linear layer
+		model:remove(#model)  -- deleting nn.Linear layer
+		local linear = nn.Linear(featuressize, nClasses)
+		model:add(linear:cuda()):add(nn.LogSoftMax():cuda())
+		return model
+	end
+	--Load file
    local model = torch.load(filename)
+	--Check if it's lastlayer replace or finetune
+	if opt.rpLastlayer then model = replaceLastlayer(model) end
+	--Make it parallel
    if torch.type(model) == 'nn.DataParallelTable' then
       return makeDataParallel(model:get(1):float(), nGPU)
-   elseif torch.type(model) == 'nn.Sequential' then
+   elseif torch.type(model) == 'nn.Sequential' and opt.netType ~= 'faceBook' then
       for i,module in ipairs(model.modules) do
-         if torch.type(module) == 'nn.Sequential' then
+         if torch.type(module) == 'nn.DataParallelTable' then
             model.modules[i] = makeDataParallel(module:get(1):float(), nGPU)
          end
       end
       return model
-   else
-      error('The loaded model is not a Sequential or DataParallelTable module.')
-   end
-end
-function loadDataParallelLastLayerOnly(filename, nGPU)
-   if opt.backend == 'cudnn' then
-      require 'cudnn'
-   end
-   local model = torch.load(filename)
-   --Add Last Layer
-   local featuressize
-   if model.modules[#model].__typename == 'nn.Linear' then
-      featuressize = model.modules[#model].weight:size(2)
-   else
-      model:remove(#model)
-      featuressize = model.modules[#model].weight:size(2)
-   end
-   --model.modules[nlayers] = nil  -- deleting nn.Linear layer
-   model:remove(#model)  -- deleting nn.Linear layer
-   local linear = nn.Linear(featuressize, nClasses)
-   model:add(linear:cuda()):add(nn.LogSoftMax():cuda())
-   if torch.type(model) == 'nn.DataParallelTable' then
-      return makeDataParallel(model:get(1):float(), nGPU)
-   elseif torch.type(model) == 'nn.Sequential' then
-      for i,module in ipairs(model.modules) do
-         if torch.type(module) == 'nn.Sequential' then
-            model.modules[i] = makeDataParallel(module:get(1):float(), nGPU)
-         end
-      end
+   elseif torch.type(model) == 'nn.Sequential' and opt.netType == 'faceBook' then
+		model = makeDataParallel(model, nGPU)
       return model
    else
       error('The loaded model is not a Sequential or DataParallelTable module.')

@@ -48,7 +48,9 @@ function M.parse(arg)
     cmd:option('-retrain',     'none', 'provide path to model to retrain with')
     cmd:option('-optimState',  'none', 'provide path to an optimState to reload from')
     cmd:option('-rngState',    'none', 'provide path to RNG state to reload from')
-    cmd:option('-lastLayer',   'none', 'provide option to fine tune or train on last layer only | fine | lastLayerOnly')
+    cmd:option('-lastLayer',        false, 'provide option to train lastlayer only')
+    cmd:option('-rpLastlayer',      false, 'provide option to replace last layer')
+
     cmd:option('-color',        false,  'Option for color image augmentation')
     cmd:text()
 

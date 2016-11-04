@@ -27,20 +27,12 @@ function conCudnn(model,opt)
       error'Unsupported backend'
    end
 end
-if opt.retrain ~= 'none' and opt.lastLayer == 'retrain'  then
+if opt.retrain ~= 'none' then
    print('RETRAIN')
    assert(paths.filep(opt.retrain), 'File not found: ' .. opt.retrain)
    print('Loading model from file: ' .. opt.retrain);
    print('Retraining')
    model = loadDataParallel(opt.retrain, opt.nGPU) -- defined in util.lua
-   conCudnn(model,opt)
-elseif opt.retrain ~= 'none' and opt.lastLayer == 'lastLayerOnly' or opt.lastLayer == 'fine'then
-   assert(paths.filep(opt.retrain), 'File not found: ' .. opt.retrain)
-   print('Loading model from file: ' .. opt.retrain);
-   print('Last Layer Onlyi and Finetunning')
-   -- loadDataParallelLastLayerOnly will replacy last layer finetunning and lastLayer is differnt
-   -- in the trainning method loading model is same
-   model = loadDataParallelLastLayerOnly(opt.retrain, opt.nGPU) -- defined in util.lua
    conCudnn(model,opt)
 else
    paths.dofile('models/' .. opt.netType .. '.lua')
