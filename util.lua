@@ -51,6 +51,7 @@ function loadDataParallel(filename, nGPU)
       require 'cudnn'
    end
 	function replaceLastlayer(model)
+      print('Replacing Last layer !!!!!')
 		--Add Last Layer
 		local featuressize
 		if model.modules[#model].__typename == 'nn.Linear' then

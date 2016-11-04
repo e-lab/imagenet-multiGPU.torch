@@ -220,11 +220,11 @@ if opt.lastLayer then
    print(model.modules[#model-1])
    parameters, gradParameters = model.modules[#model-1]:getParameters()
    print('Update last layer only')
-   print('Numer or parameters:',parameters:size())
+   print('Numer or parameters last only:',parameters:size())
    model = makeDataParallel(model, opt.nGPU)
 else
    parameters, gradParameters = model:getParameters()
-   print('Numer or parameters:',parameters:size())
+   print('Numer or parameters hole model:',parameters:size())
 end
 
 -- 4. trainBatch - Used by train() to train a single batch after the data is loaded.
