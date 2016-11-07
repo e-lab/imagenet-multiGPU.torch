@@ -54,6 +54,7 @@ function loadDataParallel(filename, nGPU)
       print('Replacing Last layer !!!!!')
 		--Add Last Layer
 		local featuressize
+      if torch.type(model) == 'nn.DataParallelTable' then model = model:get(1) end
 		if model.modules[#model].__typename == 'nn.Linear' then
 			featuressize = model.modules[#model].weight:size(2)
 		else
