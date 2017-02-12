@@ -56,7 +56,7 @@ function createModel(nGPU)
 
    local initial_block = nn.ConcatTable(2)
    initial_block:add(cudnn.SpatialConvolution(3, 13, 3, 3, 2, 2, 1, 1))
-   --initial_block:add(nn.SpatialBatchNormalization(13, 1e-3)) -- this is not neeeded, no change in training
+   initial_block:add(nn.SpatialBatchNormalization(13, 1e-3))
    initial_block:add(cudnn.SpatialMaxPooling(2, 2, 2, 2))
 
    features:add(initial_block) -- 112x112
