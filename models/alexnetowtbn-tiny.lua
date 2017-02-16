@@ -39,7 +39,7 @@ function createModel(nGPU)
    features = makeDataParallel(features, nGPU) -- defined in util.lua
 
    local classifier = nn.Sequential()
-   classifier:add(nn.View(1,64))
+   classifier:add(nn.View(64))
 
    classifier:add(nn.Linear(64, nClasses))
    classifier:add(nn.LogSoftMax())
