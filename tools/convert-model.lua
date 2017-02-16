@@ -142,7 +142,8 @@ local function squash_model(x, state)
       else
          -- remove dropout
          if state.dropout then
-            if x.modules[i].__typename == 'nn.Dropout' then
+            if x.modules[i].__typename == 'nn.Dropout' or
+               x.modules[i].__typename == 'nn.SpatialDropout' then
                x:remove(i)
                i = i - 1
             end
@@ -155,14 +156,6 @@ local function squash_model(x, state)
             if affine then
                w:cmul(gamma:view(w:size(1),1):repeatTensor(1,w:nElement()/w:size(1)))
                b:cmul(gamma):add(beta)
-            end
-         end
-
-         local absorb_bn_convnobias = function (w, mean, invstd, affine, gamma, beta)
-            w:cmul(invstd:view(w:size(1),1):repeatTensor(1,w:nElement()/w:size(1)))
-
-            if affine then
-               w:cmul(gamma:view(w:size(1),1):repeatTensor(1,w:nElement()/w:size(1)))
             end
          end
 
@@ -180,23 +173,13 @@ local function squash_model(x, state)
          if state.batchnorm then
             if x.modules[i].__typename == 'nn.SpatialBatchNormalization'  then
                if x.modules[i-1] and
-                  x.modules[i-1].bias and
                  (x.modules[i-1].__typename == 'nn.SpatialConvolution' or
                   x.modules[i-1].__typename == 'nn.SpatialConvolutionMM') then
+                  if not x.modules[i-1].bias then
+                     x.modules[i-1].bias = torch.zeros(x.modules[i-1].nOutputPlane)
+                  end
                   absorb_bn_conv(x.modules[i-1].weight,
                                  x.modules[i-1].bias,
-                                 x.modules[i].running_mean,
-                                 x.modules[i].running_var:clone():sqrt():add(x.modules[i].eps):pow(-1),
-                                 x.modules[i].affine,
-                                 x.modules[i].weight,
-                                 x.modules[i].bias)
-                  x:remove(i)
-                  i = i - 1
-               elseif x.modules[i-1] and
-                  not x.modules[i-1].bias and
-                 (x.modules[i-1].__typename == 'nn.SpatialConvolution' or
-                  x.modules[i-1].__typename == 'nn.SpatialConvolutionMM') then
-                  absorb_bn_convnobias(x.modules[i-1].weight,
                                  x.modules[i].running_mean,
                                  x.modules[i].running_var:clone():sqrt():add(x.modules[i].eps):pow(-1),
                                  x.modules[i].affine,
@@ -216,6 +199,7 @@ local function squash_model(x, state)
                   x:remove(i)
                   i = i - 1
                else
+                  -- comment this line to convert enet networks: so the first batchnorm is kept!
                   assert(false, 'Convolution module must exist right before batch normalization layer')
                end
             elseif x.modules[i].__typename == 'nn.BatchNormalization' and x.modules[i].running_std then
